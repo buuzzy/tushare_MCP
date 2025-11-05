@@ -9,7 +9,6 @@ from datetime import datetime, timedelta
 import traceback
 from mcp.server.fastmcp import FastMCP
 import os
-
 from fastapi import FastAPI, HTTPException, Body
 import uvicorn
 
@@ -56,7 +55,7 @@ def handle_exception(func):
     return wrapper
 
 # --- Start of ENV_FILE and Helper Functions ---
-ENV_FILE = Path.home() / ".tushare_mcp" / ".env"
+ENV_FILE = Path.home() / ".tinyshare_mcp" / ".env"
 log_debug(f"ENV_FILE path resolved to: {ENV_FILE}")
 
 def _get_stock_name(pro_api_instance, ts_code: str) -> str:
@@ -149,8 +148,8 @@ def _fetch_latest_report_data(
 
 # --- MCP Instance Creation ---
 try:
-    mcp = FastMCP("Tushare Tools Enhanced")
-    log_debug("FastMCP instance created for Tushare Tools Enhanced.")
+    mcp = FastMCP("Tinyshare Tools Enhanced")
+    log_debug("FastMCP instance created for Tinyshare Tools Enhanced.")
 except Exception as e:
     log_debug(f"ERROR creating FastMCP: {e}")
     traceback.print_exc(file=sys.stderr)
@@ -159,37 +158,37 @@ except Exception as e:
 
 # --- FastAPI App Creation and Basic Endpoint ---
 app = FastAPI(
-    title="Tushare MCP API",
-    description="Remote API for Tushare MCP tools via FastAPI.",
+    title="Tinyshare MCP API",
+    description="Remote API for Tinyshare MCP tools via FastAPI.",
     version="0.0.1"
 )
 
 @app.get("/")
 async def read_root():
-    return {"message": "Hello World - Tushare MCP API is running!"}
+    return {"message": "Hello World - Tinyshare MCP API is running!"}
 
-# New API endpoint for setting up Tushare token
-@app.post("/tools/setup_tushare_token", summary="Setup Tushare API token")
-async def api_setup_tushare_token(payload: dict = Body(...)):
+# New API endpoint for setting up Tinyshare token
+@app.post("/tools/setup_tinyshare_token", summary="Setup Tinyshare API token")
+async def api_setup_tinyshare_token(payload: dict = Body(...)):
     """
-    Sets the Tushare API token.
+    Sets the Tinyshare API token.
     Expects a JSON payload with a "token" key.
     Example: {"token": "your_actual_token_here"}
     """
-    log_debug(f"API /tools/setup_tushare_token called with payload: {payload}")
+    log_debug(f"API /tools/setup_tinyshare_token called with payload: {payload}")
     token = payload.get("token")
     if not token or not isinstance(token, str):
-        log_debug("API /tools/setup_tushare_token - Missing or invalid token in payload.")
+        log_debug("API /tools/setup_tinyshare_token - Missing or invalid token in payload.")
         raise HTTPException(status_code=400, detail="Missing or invalid 'token' in payload. Expected a JSON object with a 'token' string.")
 
     try:
         # Call your original tool function
-        original_tool_function_output = setup_tushare_token(token=token) # This is your original @mcp.tool() function
-        log_debug(f"API /tools/setup_tushare_token - Original tool output: {original_tool_function_output}")
+        original_tool_function_output = setup_tinyshare_token(token=token) # This is your original @mcp.tool() function
+        log_debug(f"API /tools/setup_tinyshare_token - Original tool output: {original_tool_function_output}")  
         return {"status": "success", "message": original_tool_function_output}
     except Exception as e:
         error_message = f"Error setting up token via API: {str(e)}"
-        log_debug(f"ERROR in api_setup_tushare_token: {error_message}")
+        log_debug(f"ERROR in api_setup_tinyshare_token: {error_message}")
         traceback.print_exc(file=sys.stderr) # Keep detailed server-side logs
         raise HTTPException(status_code=500, detail=error_message)
 
@@ -244,9 +243,7 @@ def set_tushare_token(token: str):
 def configure_token() -> str:
     """配置Tushare token的提示模板"""
     log_debug("Prompt configure_token is being accessed/defined.")
-    return """请提供您的Tushare API token。
-您可以在 https://tushare.pro/user/token 获取您的token。
-如果您还没有Tushare账号，请先在 https://tushare.pro/register 注册。
+    return """请提供您的Tinyshare API token。
 
 请输入您的token:"""
 
@@ -776,7 +773,6 @@ def _format_indicator_value(indicator_data: pd.Series, key: str, label: str, uni
         try:
             numeric_value = pd.to_numeric(value)
             if unit == "亿元":
-                # Tushare fina_indicator amounts are in Yuan, convert to 100 million Yuan
                 return f"{label}: {numeric_value / 100000000:.4f} {unit}"
             elif unit == "元":
                 return f"{label}: {numeric_value:.4f} {unit}"
@@ -1161,7 +1157,7 @@ def get_top_holders(ts_code: str, period: str, holder_type: str = 'H') -> str:
 def get_index_constituents(index_code: str, start_date: str, end_date: str) -> str:
     """
     获取指定指数在给定月份的成分股列表及其权重。
-    Tushare API 指明这是月度数据。为获取特定月份数据，
+    Tinyshare API 指明这是月度数据。为获取特定月份数据，
     建议 start_date 和 end_date 分别设为目标月份的第一天和最后一天。
 
     参数:
@@ -1243,7 +1239,6 @@ def get_global_index_quotes(ts_code: str, start_date: str = None, end_date: str 
 
         results = [f"--- {index_display_name} 行情数据 ---"]
         
-        # Sort by trade_date, Tushare usually returns descending, but let's ensure ascending for multi-day reports
         df_sorted = df.sort_values(by='trade_date', ascending=True)
 
         for _, row in df_sorted.iterrows():
@@ -1298,7 +1293,6 @@ def get_period_price_change(ts_code: str, start_date: str, end_date: str) -> str
             # Adjusted error message for clarity
             return f"未找到 {stock_name} ({ts_code}) 在 {start_date} 至 {end_date} 范围内的足够日线数据（需要至少两个交易日）来计算区间变动。"
 
-        # Data is typically returned in descending order of trade_date by Tushare daily API
         # So, the first row is the end_date (or latest date in range) and last row is start_date (or earliest date in range)
         actual_end_trade_date = df_daily['trade_date'].iloc[0]
         actual_start_trade_date = df_daily['trade_date'].iloc[-1]
@@ -1371,7 +1365,6 @@ def get_balance_sheet(ts_code: str, period: str) -> str:
                 try:
                     numeric_value = pd.to_numeric(value)
                     if unit == "亿元": 
-                        # Tushare balance sheet amounts are in Yuan, convert to 100 million Yuan
                         return f"{label}: {numeric_value / 100000000:.4f} {unit}"
                     elif unit == "元": # For per-share items if any (not typical for raw balances)
                         return f"{label}: {numeric_value:.4f} {unit}"
@@ -1512,7 +1505,7 @@ def get_fina_mainbz(ts_code: str, period: str, type: str = 'P', limit: int = 10)
         return "错误：Tushare token 未配置或无法获取。请使用 setup_tushare_token 配置。"
     if not period or len(period) != 8 or not period.isdigit():
         return "错误：请提供有效的 'period' 参数 (YYYYMMDD格式)。"
-    if type not in ['P', 'D', 'I']: # As per Tushare docs, 'I' is also a valid type
+    if type not in ['P', 'D', 'I']: # As per Tinyshare docs, 'I' is also a valid type
         return "错误：'type' 参数必须是 'P' (按产品), 'D' (按地区) 或 'I' (按行业)。"
 
     try:
@@ -1529,14 +1522,12 @@ def get_fina_mainbz(ts_code: str, period: str, type: str = 'P', limit: int = 10)
         total_sales = None
         if 'bz_sales' in df.columns and df['bz_sales'].notna().any():
             # Drop duplicates based on 'bz_item' before calculating total_sales to avoid double counting
-            # Keep the first occurrence if items are duplicated by Tushare for some reason
             unique_items_df = df.drop_duplicates(subset=['bz_item'], keep='first').copy() # Use .copy() to avoid SettingWithCopyWarning
             unique_items_df.loc[:, 'bz_sales_numeric'] = pd.to_numeric(unique_items_df['bz_sales'], errors='coerce')
             total_sales = unique_items_df['bz_sales_numeric'].sum()
             if total_sales == 0: 
                 total_sales = None 
 
-        # Display based on the original df (which might have duplicates from Tushare) but limit rows
         limited_df = df.head(limit)
 
         for _, row in limited_df.iterrows():
