@@ -184,7 +184,7 @@ async def api_setup_tinyshare_token(payload: dict = Body(...)):
     try:
         # Call your original tool function
         original_tool_function_output = setup_tinyshare_token(token=token) # This is your original @mcp.tool() function
-        log_debug(f"API /tools/setup_tinyshare_token - Original tool output: {original_tool_function_output}")  
+        log_debug(f"API /tools/setup_tinyshare_token - Original tool output: {original_tool_function_output}") 
         return {"status": "success", "message": original_tool_function_output}
     except Exception as e:
         error_message = f"Error setting up token via API: {str(e)}"
@@ -214,25 +214,25 @@ def init_env_file():
         log_debug(f"ERROR in init_env_file filesystem operations: {str(e_fs)}")
         traceback.print_exc(file=sys.stderr)
 
-def get_tushare_token() -> Optional[str]:
-    """获取Tushare token"""
-    log_debug("get_tushare_token called.")
+def get_tinyshare_token() -> Optional[str]:
+    """获取Tinyshare token"""
+    log_debug("get_tinyshare_token called.")
     init_env_file()
-    token = os.getenv("TUSHARE_TOKEN")
-    log_debug(f"get_tushare_token: os.getenv result: {'TOKEN_FOUND' if token else 'NOT_FOUND'}")
+    token = os.getenv("TINYSHARE_TOKEN")
+    log_debug(f"get_tinyshare_token: os.getenv result: {'TOKEN_FOUND' if token else 'NOT_FOUND'}")
     return token
 
-def set_tushare_token(token: str):
-    """设置Tushare token"""
-    log_debug(f"set_tushare_token called with token: {'********' if token else 'None'}")
+def set_tinyshare_token(token: str):
+    """设置Tinyshare token"""
+    log_debug(f"set_tinyshare_token called with token: {'********' if token else 'None'}")
     init_env_file()
     try:
-        set_key(ENV_FILE, "TUSHARE_TOKEN", token)
+        set_key(ENV_FILE, "TINYSHARE_TOKEN", token)
         log_debug(f"set_key executed for ENV_FILE: {ENV_FILE}")
         ts.set_token(token)
         log_debug("ts.set_token(token) executed.")
     except Exception as e_set_token:
-        log_debug(f"ERROR in set_tushare_token during set_key or ts.set_token: {str(e_set_token)}")
+        log_debug(f"ERROR in set_tinyshare_token during set_key or ts.set_token: {str(e_set_token)}")
         traceback.print_exc(file=sys.stderr)
 
 # --- End of Core Token Management Functions ---
@@ -241,45 +241,45 @@ def set_tushare_token(token: str):
 
 @mcp.prompt()
 def configure_token() -> str:
-    """配置Tushare token的提示模板"""
+    """配置Tinyshare token的提示模板"""
     log_debug("Prompt configure_token is being accessed/defined.")
     return """请提供您的Tinyshare API token。
 
 请输入您的token:"""
 
 @mcp.tool()
-def setup_tushare_token(token: str) -> str:
-    """设置Tushare API token"""
-    log_debug(f"Tool setup_tushare_token called with token: {'********' if token else 'None'}")
+def setup_tinyshare_token(token: str) -> str:
+    """设置Tinyshare API token"""
+    log_debug(f"Tool setup_tinyshare_token called with token: {'********' if token else 'None'}")
     try:
-        set_tushare_token(token) # This function internally calls ts.set_token(token) which might be enough
-                                 # However, to be consistent and absolutely sure, we'll also re-init pro with this token.
-        log_debug("setup_tushare_token attempting explicit ts.pro_api(token) call.")
+        set_tinyshare_token(token) # This function internally calls ts.set_token(token) which might be enough
+                                # However, to be consistent and absolutely sure, we'll also re-init pro with this token.
+        log_debug("setup_tinyshare_token attempting explicit ts.pro_api(token) call.")
         # Explicitly get and use the token that was just set for this verification step.
-        current_token = get_tushare_token()
+        current_token = get_tinyshare_token()
         if not current_token:
-            # This case should ideally not be reached if set_tushare_token worked and set the env var
-            # that get_tushare_token reads.
+            # This case should ideally not be reached if set_tinyshare_token worked and set the env var
+            # that get_tinyshare_token reads.
             return "Token配置尝试完成，但未能立即验证。请稍后使用 check_token_status 检查。"
         ts.pro_api(current_token) # Verify with the token just set and retrieved
-        log_debug("setup_tushare_token ts.pro_api(current_token) call successful.")
-        return "Token配置成功！您现在可以使用Tushare的API功能了。"
+        log_debug("setup_tinyshare_token ts.pro_api(current_token) call successful.")
+        return "Token配置成功！您现在可以使用Tinyshare的API功能了。"
     except Exception as e:
-        log_debug(f"ERROR in setup_tushare_token: {str(e)}")
+        log_debug(f"ERROR in setup_tinyshare_token: {str(e)}")
         traceback.print_exc(file=sys.stderr)
         return f"Token配置失败：{str(e)}"
 
 @mcp.tool()
 def check_token_status() -> str:
-    """检查Tushare token状态"""
+    """检查Tinyshare token状态"""
     log_debug("Tool check_token_status called.")
-    token = get_tushare_token()
+    token = get_tinyshare_token()
     if not token:
-        log_debug("check_token_status: No token found by get_tushare_token.")
-        return "未配置Tushare token。请使用configure_token提示来设置您的token。"
+        log_debug("check_token_status: No token found by get_tinyshare_token.")
+        return "未配置Tinyshare token。请使用 setup_tinyshare_token 配置。"
 
     # **** MODIFICATION FOR DIAGNOSIS ****
-    log_debug(f"check_token_status: Token value from get_tushare_token() is '[{'*' * len(token) if token else 'None'}]'")
+    log_debug(f"check_token_status: Token value from get_tinyshare_token() is '[{'*' * len(token) if token else 'None'}]'")
     # ***********************************
 
     try:
@@ -288,10 +288,10 @@ def check_token_status() -> str:
         ts.pro_api(token) # Pass the retrieved token explicitly
         # ***********************************
         log_debug("check_token_status ts.pro_api(token) call successful.")
-        return "Token配置正常，可以使用Tushare API。"
+        return "Token配置正常，可以使用Tinyshare API。"
     except Exception as e:
         # **** MODIFICATION FOR DIAGNOSIS ****
-        log_debug(f"ERROR in check_token_status (with explicit token from get_tushare_token): {str(e)}")
+        log_debug(f"ERROR in check_token_status (with explicit token from get_tinyshare_token): {str(e)}")
         # ***********************************
         traceback.print_exc(file=sys.stderr)
         # **** MODIFICATION FOR DIAGNOSIS ****
@@ -308,9 +308,9 @@ def get_stock_basic_info(ts_code: str = "", name: str = "") -> str:
         name: 股票名称（如：平安银行）
     """
     print(f"DEBUG: Tool get_stock_basic_info called with ts_code: '{ts_code}', name: '{name}'.", file=sys.stderr, flush=True)
-    token_value = get_tushare_token()
+    token_value = get_tinyshare_token()
     if not token_value:
-        return "错误：Tushare token 未配置或无法获取。请使用 setup_tushare_token 配置。"
+        return "错误：Tinyshare token 未配置或无法获取。请使用 setup_tinyshare_token 配置。"
     try:
         pro = ts.pro_api(token_value)
         filters = {}
@@ -358,9 +358,9 @@ def get_hk_stock_basic(ts_code: str = None, list_status: str = 'L') -> str:
         list_status: 上市状态 (可选, 'L'上市, 'D'退市, 'P'暂停上市。默认为'L')
     """
     print(f"DEBUG: Tool get_hk_stock_basic called with ts_code: '{ts_code}', list_status: '{list_status}'.", file=sys.stderr, flush=True)
-    token_value = get_tushare_token()
+    token_value = get_tinyshare_token()
     if not token_value:
-        return "错误：Tushare token 未配置或无法获取。请使用 setup_tushare_token 配置。"
+        return "错误：Tinyshare token 未配置或无法获取。请使用 setup_tinyshare_token 配置。"
     
     try:
         pro = ts.pro_api(token_value)
@@ -420,9 +420,9 @@ def search_index(index_name: str, market: str = None, publisher: str = None, cat
         category: 指数类别 (可选, 例如: "规模指数", "行业指数")
     """
     print(f"DEBUG: Tool search_index called with name: '{index_name}', market: '{market}', publisher: '{publisher}', category: '{category}'.", file=sys.stderr, flush=True)
-    token_value = get_tushare_token()
+    token_value = get_tinyshare_token()
     if not token_value:
-        return "错误：Tushare token 未配置或无法获取。请使用 setup_tushare_token 配置。"
+        return "错误：Tinyshare token 未配置或无法获取。请使用 setup_tinyshare_token 配置。"
     if not index_name:
         return "错误: 指数名称 (index_name) 是必需参数。"
 
@@ -488,9 +488,9 @@ def get_index_list(ts_code: str = None, name: str = None, market: str = None, pu
         category: 指数类别 (可选, 例如: "规模指数", "行业指数")
     """
     print(f"DEBUG: Tool get_index_list called with ts_code: '{ts_code}', name: '{name}', market: '{market}', publisher: '{publisher}', category: '{category}'.", file=sys.stderr, flush=True)
-    token_value = get_tushare_token()
+    token_value = get_tinyshare_token()
     if not token_value:
-        return "错误：Tushare token 未配置或无法获取。请使用 setup_tushare_token 配置。"
+        return "错误：Tinyshare token 未配置或无法获取。请使用 setup_tinyshare_token 配置。"
 
     if not any([ts_code, name, market, publisher, category]):
         return "错误: 请至少提供一个查询参数 (ts_code, name, market, publisher, or category)。"
@@ -559,9 +559,9 @@ def search_stocks(keyword: str) -> str:
         keyword: 关键词（可以是股票代码的一部分或股票名称的一部分）
     """
     print(f"DEBUG: Tool search_stocks called with keyword: '{keyword}'.", file=sys.stderr, flush=True)
-    token_value = get_tushare_token()
+    token_value = get_tinyshare_token()
     if not token_value:
-        return "错误：Tushare token 未配置或无法获取。请使用 setup_tushare_token 配置。"
+        return "错误：Tinyshare token 未配置或无法获取。请使用 setup_tinyshare_token 配置。"
     try:
         pro = ts.pro_api(token_value)
         df = pro.stock_basic()
@@ -589,9 +589,9 @@ def get_daily_metrics(ts_code: str, trade_date: str) -> str:
         trade_date: 交易日期 (YYYYMMDD格式, 例如: 20240421)
     """
     print(f"DEBUG: Tool get_daily_metrics called with ts_code: '{ts_code}', trade_date: '{trade_date}'.", file=sys.stderr, flush=True)
-    token_value = get_tushare_token()
+    token_value = get_tinyshare_token()
     if not token_value:
-        return "错误：Tushare token 未配置或无法获取。请使用 setup_tushare_token 配置。"
+        return "错误：Tinyshare token 未配置或无法获取。请使用 setup_tinyshare_token 配置。"
     try:
         pro = ts.pro_api(token_value)
         df = pro.daily_basic(ts_code=ts_code, trade_date=trade_date,
@@ -636,9 +636,9 @@ def get_daily_prices(ts_code: str, trade_date: str = None, start_date: str = Non
         end_date: 结束日期 (YYYYMMDD格式)。需与 start_date 一同使用。
     """
     print(f"DEBUG: Tool get_daily_prices called with ts_code: '{ts_code}', trade_date: '{trade_date}', start_date: '{start_date}', end_date: '{end_date}'.", file=sys.stderr, flush=True)
-    token_value = get_tushare_token()
+    token_value = get_tinyshare_token()
     if not token_value:
-        return "错误：Tushare token 未配置或无法获取。请使用 setup_tushare_token 配置。"
+        return "错误：Tinyshare token 未配置或无法获取。请使用 setup_tinyshare_token 配置。"
 
     if not ((trade_date and not (start_date or end_date)) or ((start_date and end_date) and not trade_date)):
         return "错误：请提供 trade_date (用于单日查询) 或 start_date 和 end_date (用于区间查询)。"
@@ -814,7 +814,7 @@ def _format_single_report(indicator_data: pd.Series) -> str:
     results_for_report.append(_format_indicator_value(indicator_data, 'n_income_attr_p', '归属母公司净利润', unit='亿元'))
     results_for_report.append(_format_indicator_value(indicator_data, 'rd_exp', '研发费用', unit='亿元'))
     results_for_report.append(_format_indicator_value(indicator_data, 'tr_yoy', '营业总收入同比增长率'))
-    results_for_report.append(_format_indicator_value(indicator_data, 'or_yoy', '营业收入同比增长率'))  # Operating Revenue YoY
+    results_for_report.append(_format_indicator_value(indicator_data, 'or_yoy', '营业收入同比增长率')) # Operating Revenue YoY
     results_for_report.append(_format_indicator_value(indicator_data, 'n_income_attr_p_yoy', '归母净利润同比增长率'))
     results_for_report.append(_format_indicator_value(indicator_data, 'dtprofit_yoy', '扣非净利润同比增长率'))
     results_for_report.append(f"更新标识: {indicator_data.get('update_flag', 'N/A')}")
@@ -849,9 +849,9 @@ def get_financial_indicator(
         limit: 返回记录的条数上限 (默认为10)
     """
     print(f"DEBUG: Tool get_financial_indicator called with ts_code: '{ts_code}', period: '{period}', ann_date: '{ann_date}', start_date: '{start_date}', end_date: '{end_date}', limit: {limit}.", file=sys.stderr, flush=True)
-    token_value = get_tushare_token()
+    token_value = get_tinyshare_token()
     if not token_value:
-        return "错误：Tushare token 未配置或无法获取。请使用 setup_tushare_token 配置。"
+        return "错误：Tinyshare token 未配置或无法获取。请使用 setup_tinyshare_token 配置。"
 
     # 验证参数
     validation_error = _validate_financial_indicator_params(ts_code, period, ann_date, start_date, end_date)
@@ -868,7 +868,7 @@ def get_financial_indicator(
             api_params['period'] = period
         if ann_date:
             api_params['ann_date'] = ann_date
-        if start_date and end_date:  # ann_date range
+        if start_date and end_date: # ann_date range
             api_params['start_date'] = start_date
             api_params['end_date'] = end_date
 
@@ -919,14 +919,14 @@ def get_income_statement(ts_code: str, period: str, report_type: str = "1") -> s
         report_type: 报告类型（默认为1，合并报表）
     """
     print(f"DEBUG: Tool get_income_statement called with ts_code: '{ts_code}', period: '{period}', report_type: '{report_type}'.", file=sys.stderr, flush=True)
-    token_value = get_tushare_token()
+    token_value = get_tinyshare_token()
     if not token_value:
-        return "错误：Tushare token 未配置或无法获取。请使用 setup_tushare_token 配置。"
+        return "错误：Tinyshare token 未配置或无法获取。请使用 setup_tinyshare_token 配置。"
     try:
         pro = ts.pro_api(token_value)
         # 获取当期利润表
         df_current = pro.income(ts_code=ts_code, period=period, report_type=report_type,
-                                fields='ts_code,ann_date,f_ann_date,end_date,report_type,comp_type,basic_eps,n_income_attr_p')
+                                 fields='ts_code,ann_date,f_ann_date,end_date,report_type,comp_type,basic_eps,n_income_attr_p')
         if df_current.empty:
             return f"未找到 {ts_code} ({ts_code}) 在 {period} 的利润表数据。"
         current_income_data = df_current.iloc[0]
@@ -945,10 +945,10 @@ def get_income_statement(ts_code: str, period: str, report_type: str = "1") -> s
         if df_previous_latest is not None:
              previous_profit_raw = df_previous_latest.iloc[0].get('n_income_attr_p')
              if pd.notna(previous_profit_raw):
-                previous_profit = pd.to_numeric(previous_profit_raw, errors='coerce')
-                previous_profit_str = f"{previous_profit / 100000000:.4f} 亿元"
+                 previous_profit = pd.to_numeric(previous_profit_raw, errors='coerce')
+                 previous_profit_str = f"{previous_profit / 100000000:.4f} 亿元"
              else:
-                 previous_profit_str = "去年同期净利润数据无效"
+                  previous_profit_str = "去年同期净利润数据无效"
         profit_yoy_str = "无法计算 (缺少本期或去年同期数据)"
         if pd.notna(current_profit) and previous_profit is not None and pd.notna(previous_profit):
             if previous_profit == 0:
@@ -996,34 +996,34 @@ def income_statement_query() -> str:
 1. 股票代码（必填，如：000001.SZ）
 
 2. 时间范围（可选）：
-   - 开始日期（YYYYMMDD格式，如：20230101）
-   - 结束日期（YYYYMMDD格式，如：20231231）
+    - 开始日期（YYYYMMDD格式，如：20230101）
+    - 结束日期（YYYYMMDD格式，如：20231231）
 
 3. 报告类型（可选，默认为合并报表）：
-   1 = 合并报表（默认）
-   2 = 单季合并
-   3 = 调整单季合并表
-   4 = 调整合并报表
-   5 = 调整前合并报表
-   6 = 母公司报表
-   7 = 母公司单季表
-   8 = 母公司调整单季表
-   9 = 母公司调整表
-   10 = 母公司调整前报表
-   11 = 母公司调整前合并报表
-   12 = 母公司调整前报表
+    1 = 合并报表（默认）
+    2 = 单季合并
+    3 = 调整单季合并表
+    4 = 调整合并报表
+    5 = 调整前合并报表
+    6 = 母公司报表
+    7 = 母公司单季表
+    8 = 母公司调整单季表
+    9 = 母公司调整表
+    10 = 母公司调整前报表
+    11 = 母公司调整前合并报表
+    12 = 母公司调整前报表
 
 示例查询：
 1. 查询最新报表：
-   "查询平安银行(000001.SZ)的最新利润表"
+    "查询平安银行(000001.SZ)的最新利润表"
 
 2. 查询指定时间范围：
-   "查询平安银行2023年的利润表"
-   "查询平安银行2023年第一季度的利润表"
+    "查询平安银行2023年的利润表"
+    "查询平安银行2023年第一季度的利润表"
 
 3. 查询特定报表类型：
-   "查询平安银行的母公司报表"
-   "查询平安银行2023年的单季合并报表"
+    "查询平安银行的母公司报表"
+    "查询平安银行2023年的单季合并报表"
 
 请告诉我您想查询的内容："""
 
@@ -1037,9 +1037,9 @@ def get_shareholder_count(ts_code: str, end_date: str = "") -> str:
         end_date: 截止日期 (YYYYMMDD, 例如: 20240930)
     """
     print(f"DEBUG: Tool get_shareholder_count called with ts_code: '{ts_code}', end_date: '{end_date}'.", file=sys.stderr, flush=True)
-    token_value = get_tushare_token()
+    token_value = get_tinyshare_token()
     if not token_value:
-        return "错误：Tushare token 未配置或无法获取。请使用 setup_tushare_token 配置。"
+        return "错误：Tinyshare token 未配置或无法获取。请使用 setup_tinyshare_token 配置。"
     try:
         pro = ts.pro_api(token_value)
         params = {
@@ -1079,9 +1079,9 @@ def get_daily_basic_info(ts_code: str, trade_date: str) -> str:
         trade_date: 交易日期 (YYYYMMDD, 例如: 20240930)
     """
     print(f"DEBUG: Tool get_daily_basic_info called with ts_code: '{ts_code}', trade_date: '{trade_date}'.", file=sys.stderr, flush=True)
-    token_value = get_tushare_token()
+    token_value = get_tinyshare_token()
     if not token_value:
-        return "错误：Tushare token 未配置或无法获取。请使用 setup_tushare_token 配置。"
+        return "错误：Tinyshare token 未配置或无法获取。请使用 setup_tinyshare_token 配置。"
     try:
         pro = ts.pro_api(token_value)
         df = pro.daily_basic(ts_code=ts_code, trade_date=trade_date,
@@ -1127,9 +1127,9 @@ def get_top_holders(ts_code: str, period: str, holder_type: str = 'H') -> str:
         holder_type: 股东类型 ('H'=前十大股东, 'F'=前十大流通股东, 默认为'H')
     """
     print(f"DEBUG: Tool get_top_holders called with ts_code: '{ts_code}', period: '{period}', holder_type: '{holder_type}'.", file=sys.stderr, flush=True)
-    token_value = get_tushare_token()
+    token_value = get_tinyshare_token()
     if not token_value:
-        return "错误：Tushare token 未配置或无法获取。请使用 setup_tushare_token 配置。"
+        return "错误：Tinyshare token 未配置或无法获取。请使用 setup_tinyshare_token 配置。"
     if not period or len(period) != 8 or not period.isdigit():
         return "错误：请提供有效的 'period' 参数 (YYYYMMDD格式)。"
     if holder_type not in ['H', 'F']:
@@ -1166,9 +1166,9 @@ def get_index_constituents(index_code: str, start_date: str, end_date: str) -> s
         end_date: 结束日期 (YYYYMMDD格式, 例如: 20230930)
     """
     print(f"DEBUG: Tool get_index_constituents called with index_code: '{index_code}', start_date: '{start_date}', end_date: '{end_date}'.", file=sys.stderr, flush=True)
-    token_value = get_tushare_token()
+    token_value = get_tinyshare_token()
     if not token_value:
-        return "错误：Tushare token 未配置或无法获取。请使用 setup_tushare_token 配置。"
+        return "错误：Tinyshare token 未配置或无法获取。请使用 setup_tinyshare_token 配置。"
     try:
         pro = ts.pro_api(token_value)
         df = pro.index_weight(index_code=index_code, start_date=start_date, end_date=end_date,
@@ -1198,9 +1198,9 @@ def get_global_index_quotes(ts_code: str, start_date: str = None, end_date: str 
         trade_date: 单个交易日期 (YYYYMMDD格式, 例如: 20240115)。如果提供，将只查询该日数据。
     """
     print(f"DEBUG: Tool get_global_index_quotes called with ts_code: '{ts_code}', start_date: '{start_date}', end_date: '{end_date}', trade_date: '{trade_date}'.", file=sys.stderr, flush=True)
-    token_value = get_tushare_token()
+    token_value = get_tinyshare_token()
     if not token_value:
-        return "错误：Tushare token 未配置或无法获取。请使用 setup_tushare_token 配置。"
+        return "错误：Tinyshare token 未配置或无法获取。请使用 setup_tinyshare_token 配置。"
     if not ts_code:
         return "错误：指数代码 (ts_code) 是必需的。"
     if not trade_date and not (start_date and end_date):
@@ -1280,9 +1280,9 @@ def get_period_price_change(ts_code: str, start_date: str, end_date: str) -> str
         end_date: 区间结束日期 (YYYYMMDD, 例如: 20240930)
     """
     print(f"DEBUG: Tool get_period_price_change called with ts_code: '{ts_code}', start_date: '{start_date}', end_date: '{end_date}'.", file=sys.stderr, flush=True)
-    token_value = get_tushare_token()
+    token_value = get_tinyshare_token()
     if not token_value:
-        return "错误：Tushare token 未配置或无法获取。请使用 setup_tushare_token 配置。"
+        return "错误：Tinyshare token 未配置或无法获取。请使用 setup_tinyshare_token 配置。"
     try:
         pro = ts.pro_api(token_value)
         stock_name = _get_stock_name(pro, ts_code)
@@ -1326,9 +1326,9 @@ def get_balance_sheet(ts_code: str, period: str) -> str:
         period: 报告期 (YYYYMMDD格式, 例如: 20240930)
     """
     print(f"DEBUG: Tool get_balance_sheet called with ts_code: '{ts_code}', period: '{period}'.", file=sys.stderr, flush=True)
-    token_value = get_tushare_token()
+    token_value = get_tinyshare_token()
     if not token_value:
-        return "错误：Tushare token 未配置或无法获取。请使用 setup_tushare_token 配置。"
+        return "错误：Tinyshare token 未配置或无法获取。请使用 setup_tinyshare_token 配置。"
     if not period or len(period) != 8 or not period.isdigit():
         return "错误：请提供有效的 'period' 参数 (YYYYMMDD格式)。"
     try:
@@ -1403,9 +1403,9 @@ def get_cash_flow(ts_code: str, period: str) -> str:
         period: 报告期 (YYYYMMDD格式, 例如: 20240930)
     """
     print(f"DEBUG: Tool get_cash_flow called with ts_code: '{ts_code}', period: '{period}'.", file=sys.stderr, flush=True)
-    token_value = get_tushare_token()
+    token_value = get_tinyshare_token()
     if not token_value:
-        return "错误：Tushare token 未配置或无法获取。请使用 setup_tushare_token 配置。"
+        return "错误：Tinyshare token 未配置或无法获取。请使用 setup_tinyshare_token 配置。"
     if not period or len(period) != 8 or not period.isdigit():
         return "错误：请提供有效的 'period' 参数 (YYYYMMDD格式)。"
     try:
@@ -1463,9 +1463,9 @@ def get_pledge_detail(ts_code: str) -> str:
         ts_code: 股票代码 (例如: 002277.SZ)
     """
     print(f"DEBUG: Tool get_pledge_detail called for ts_code: '{ts_code}'.", file=sys.stderr, flush=True)
-    token_value = get_tushare_token()
+    token_value = get_tinyshare_token()
     if not token_value:
-        return "错误：Tushare token 未配置或无法获取。请使用 setup_tushare_token 配置。"
+        return "错误：Tinyshare token 未配置或无法获取。请使用 setup_tinyshare_token 配置。"
     try:
         pro = ts.pro_api(token_value)
         stock_name = _get_stock_name(pro, ts_code)
@@ -1500,9 +1500,9 @@ def get_fina_mainbz(ts_code: str, period: str, type: str = 'P', limit: int = 10)
         limit: 显示条数上限 (默认为10)
     """
     print(f"DEBUG: Tool get_fina_mainbz called with ts_code: '{ts_code}', period: '{period}', type: '{type}', limit: {limit}.", file=sys.stderr, flush=True)
-    token_value = get_tushare_token()
+    token_value = get_tinyshare_token()
     if not token_value:
-        return "错误：Tushare token 未配置或无法获取。请使用 setup_tushare_token 配置。"
+        return "错误：Tinyshare token 未配置或无法获取。请使用 setup_tinyshare_token 配置。"
     if not period or len(period) != 8 or not period.isdigit():
         return "错误：请提供有效的 'period' 参数 (YYYYMMDD格式)。"
     if type not in ['P', 'D', 'I']: # As per Tinyshare docs, 'I' is also a valid type
@@ -1580,9 +1580,9 @@ def get_fina_audit(ts_code: str, period: str) -> str:
         period: 报告期 (YYYYMMDD格式, 例如: 20231231)
     """
     print(f"DEBUG: Tool get_fina_audit called with ts_code: '{ts_code}', period: '{period}'.", file=sys.stderr, flush=True)
-    token_value = get_tushare_token()
+    token_value = get_tinyshare_token()
     if not token_value:
-        return "错误：Tushare token 未配置或无法获取。请使用 setup_tushare_token 配置。"
+        return "错误：Tinyshare token 未配置或无法获取。请使用 setup_tinyshare_token 配置。"
     if not period or len(period) != 8 or not period.isdigit():
         return "错误：请提供有效的 'period' 参数 (YYYYMMDD格式)。"
     try:
@@ -1615,9 +1615,9 @@ def get_top_list_detail(trade_date: str, ts_code: str = None) -> str:
         ts_code: 股票代码 (可选, 例如: 000001.SZ)
     """
     print(f"DEBUG: Tool get_top_list_detail called with trade_date: '{trade_date}', ts_code: '{ts_code}'.", file=sys.stderr, flush=True)
-    token_value = get_tushare_token()
+    token_value = get_tinyshare_token()
     if not token_value:
-        return "错误：Tushare token 未配置或无法获取。请使用 setup_tushare_token 配置。"
+        return "错误：Tinyshare token 未配置或无法获取。请使用 setup_tinyshare_token 配置。"
     if not trade_date:
         return "错误：交易日期 (trade_date) 是必需的。"
 
@@ -1670,9 +1670,9 @@ def get_top_institution_detail(trade_date: str, ts_code: str = None) -> str:
         ts_code: 股票代码 (可选, 例如: 000001.SZ)
     """
     print(f"DEBUG: Tool get_top_institution_detail called with trade_date: '{trade_date}', ts_code: '{ts_code}'.", file=sys.stderr, flush=True)
-    token_value = get_tushare_token()
+    token_value = get_tinyshare_token()
     if not token_value:
-        return "错误：Tushare token 未配置或无法获取。请使用 setup_tushare_token 配置。"
+        return "错误：Tinyshare token 未配置或无法获取。请使用 setup_tinyshare_token 配置。"
     if not trade_date:
         return "错误：交易日期 (trade_date) 是必需的。"
 
@@ -1776,9 +1776,9 @@ def get_trade_calendar(exchange: str = '', start_date: str = None, end_date: str
         end_date: str, 结束日期 (格式：YYYYMMDD)
     """
     print(f"DEBUG: Tool get_trade_calendar called with exchange='{exchange}', start_date='{start_date}', end_date='{end_date}'.", file=sys.stderr, flush=True)
-    token_value = get_tushare_token()
+    token_value = get_tinyshare_token()
     if not token_value:
-        return "错误：Tushare token 未配置或无法获取。请使用 setup_tushare_token 配置。"
+        return "错误：Tinyshare token 未配置或无法获取。请使用 setup_tinyshare_token 配置。"
 
     try:
         pro = ts.pro_api(token_value)
@@ -1831,9 +1831,9 @@ def get_start_date_for_n_days(end_date: str, days_ago: int = 80) -> str:
         days_ago: int, 需要回溯的交易日天数 (默认为80)
     """
     print(f"DEBUG: Tool get_start_date_for_n_days called with end_date='{end_date}', days_ago={days_ago}.", file=sys.stderr, flush=True)
-    token_value = get_tushare_token()
+    token_value = get_tinyshare_token()
     if not token_value:
-        return "错误：Tushare token 未配置或无法获取。请使用 setup_tushare_token 配置。"
+        return "错误：Tinyshare token 未配置或无法获取。请使用 setup_tinyshare_token 配置。"
 
     try:
         pro = ts.pro_api(token_value)
