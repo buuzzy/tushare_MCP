@@ -54,7 +54,7 @@
 
 ```mermaid
 graph TD
-    Client(["AI Client (Claude / Cursor)"]) -->|MCP Protocol (SSE / Stdio)| MCPServer[Tushare MCP Server]
+    Client["AI Client (Claude / Cursor)"] -->|MCP Protocol (SSE / Stdio)| MCPServer[Tushare MCP Server]
     MCPServer -->|Tool Execution| Tools[Tool Implementation]
     Tools -->|Data Request| SDK[Tinyshare SDK]
     SDK -->|HTTP API| Tushare[("Tushare Pro API")]
