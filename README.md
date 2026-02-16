@@ -52,16 +52,25 @@
 
 ## 🏗️ 技术架构
 
-```mermaid
-graph TD
-    Client["AI Client (Claude / Cursor)"] -->|MCP Protocol (SSE / Stdio)| MCPServer[Tushare MCP Server]
-    MCPServer -->|Tool Execution| Tools[Tool Implementation]
-    Tools -->|Data Request| SDK[Tinyshare SDK]
-    SDK -->|HTTP API| Tushare[("Tushare Pro API")]
-    Tushare -->|JSON Data| SDK
-    SDK -->|Structured Result| Tools
-    Tools -->|Context| MCPServer
-    MCPServer -->|Answer| Client
+```text
++-----------------------------+       +--------------------------+
+|  AI Client (Claude/Cursor)  |       |    Tushare MCP Server    |
+|                             | <---> |    (FastAPI / MCP SDK)   |
++-----------------------------+       +--------------------------+
+            ^                                      ^
+            | SSE / Stdio                          | Tool Exec
+            v                                      v
+                                      +--------------------------+
+                                      |      Tinyshare SDK       |
+                                      |   (Retry / Format / Log) |
+                                      +--------------------------+
+                                                   ^
+                                                   | HTTP Request
+                                                   v
+                                      +--------------------------+
+                                      |     Tushare Pro API      |
+                                      |      (Data Source)       |
+                                      +--------------------------+
 ```
 
 ## 🚀 快速开始
