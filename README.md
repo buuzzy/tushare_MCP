@@ -29,6 +29,12 @@
 
 **Tushare MCP** 是一款连接 AI（Claude, Cursor）与 Tushare 金融大数据的桥梁。它实现了 Model Context Protocol (MCP) 标准，让你的 AI 助手能够直接调用 30+ 个专业金融数据接口，实时查询股票行情、财务报表、公司基本面等关键数据。
 
+本项目采用了更为方便、平价的 tinyshare SDK，替代了官方的 tushare 库。使用下述依赖
+
+```
+import tinyshare as ts
+```
+
 ## 🌟 核心功能
 
 ### 1. 🤖 完美适配主流 AI 客户端
