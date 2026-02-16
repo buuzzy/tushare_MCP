@@ -1,194 +1,203 @@
-# Tushare MCP
+# Tushare MCP 📈
 
-A股数据查询服务，基于 MCP (Model Context Protocol) 协议，支持通过 AI 助手（Claude Desktop、Cursor 等）用自然语言查询股票数据。
+> 基于 MCP (Model Context Protocol) 协议构建的 A 股金融数据 AI 助手扩展 (v0.1.0)
 
-## 重要说明
+<div align="center">
 
-**本项目使用 `tinyshare` SDK，而非官方 `tushare`。**
+  <h3>让 AI 读懂中国股市</h3>
+  <p>Claude Desktop / Cursor 无缝集成 · A 股/港股全量数据 · 财务报表 · 智能 Token 管理</p>
 
-如果你想用官方 tushare，修改 `server.py` 第 5 行：
-```python
-# 当前
-import tinyshare as ts
+  <p>
+    <img src="https://img.shields.io/badge/Protocol-MCP_1.0-blue?style=flat-square" alt="MCP">
+    <img src="https://img.shields.io/badge/Language-Python_3.10+-3776ab?style=flat-square" alt="Python">
+    <img src="https://img.shields.io/badge/Framework-FastAPI-009688?style=flat-square" alt="FastAPI">
+    <img src="https://img.shields.io/badge/Data-Tushare_Pro-orange?style=flat-square" alt="Tushare">
+    <img src="https://img.shields.io/badge/License-MIT-lightgrey?style=flat-square" alt="License">
+  </p>
 
-# 改为
-import tushare as ts
+  <p>
+    <a href="#-核心功能">核心功能</a> •
+    <a href="#-技术架构">技术架构</a> •
+    <a href="#-快速开始">快速开始</a> •
+    <a href="#-工具列表">工具列表</a> •
+    <a href="#-项目结构">项目结构</a>
+  </p>
+
+</div>
+
+---
+
+**Tushare MCP** 是一款连接 AI（Claude, Cursor）与 Tushare 金融大数据的桥梁。它实现了 Model Context Protocol (MCP) 标准，让你的 AI 助手能够直接调用 30+ 个专业金融数据接口，实时查询股票行情、财务报表、公司基本面等关键数据。
+
+## 🌟 核心功能
+
+### 1. 🤖 完美适配主流 AI 客户端
+*   **Claude Desktop**: 标准 SSE / Stdio 模式支持，本地直接运行。
+*   **Cursor IDE**: 在编辑器中直接询问代码相关的股票数据，辅助金融编程。
+
+### 2. 📊 全维度数据覆盖
+*   **基础数据**: 股票列表、IPO 新股、交易日历、上市公司基本面。
+*   **行情数据**: 日/周/月线行情、每日指标（PE/PB/市值）、涨跌停分析。
+*   **财务报表**: 利润表、资产负债表、现金流量表、业绩预告、主营业务构成。
+*   **特色数据**: 沪深港通十大成交股、融资融券、股权质押。
+
+### 3. 🛠 智能 Token 管理
+*   **一键配置**: 提供 `setup_tushare_token` 工具，对话即可完成配置。
+*   **本地加密**: Token 安全存储于本地环境，无需重复输入。
+*   **自动验证**: 启动时自动检查 Token 有效性。
+
+### 4. ⚡ 高性能架构
+*   **FastAPI 驱动**: 基于 FastAPI 构建的高性能 SSE 服务端。
+*   **Tinyshare SDK**: 深度优化的 Tushare 接口封装，支持重试与异常处理。
+
+## 🏗️ 技术架构
+
+```mermaid
+graph TD
+    Client([AI Client (Claude / Cursor)]) -->|MCP Protocol (SSE / Stdio)| MCPServer[Tushare MCP Server]
+    MCPServer -->|Tool Execution| Tools[Tool Implementation]
+    Tools -->|Data Request| SDK[Tinyshare SDK]
+    SDK -->|HTTP API| Tushare[(Tushare Pro API)]
+    Tushare -->|JSON Data| SDK
+    SDK -->|Structured Result| Tools
+    Tools -->|Context| MCPServer
+    MCPServer -->|Answer| Client
 ```
 
-同时修改 `requirements.txt`：将 `tinyshare` 替换为 `tushare==版本号`
+## 🚀 快速开始
 
-## 功能
+### 1. 环境准备
 
-提供 25 个 MCP 工具，覆盖：
-- A股、港股基本信息
-- 日线行情、财务报表
-- 股东信息、指数数据
-- 龙虎榜、交易日历
-
-## 快速开始
-
-### 安装
+确保已安装 python 3.10+。
 
 ```bash
 # 1. 克隆项目
-git clone <你的仓库地址>
-cd tushare-mcp
+git clone <repository-url> tushare_mcp
+cd tushare_mcp
 
-# 2. 创建虚拟环境（macOS 必需）
+# 2. 创建虚拟环境
 python3 -m venv venv
-source venv/bin/activate
+source venv/bin/activate  # macOS/Linux
+# venv\Scripts\activate   # Windows
 
 # 3. 安装依赖
 pip install -r requirements.txt
 ```
 
-### 配置 Token
+### 2. 配置说明
 
-启动后，在 AI 助手中调用 `setup_tushare_token` 工具配置。
+你也可以通过环境变量手动配置：
 
-或手动创建配置文件：
 ```bash
-mkdir -p ~/.tushare_mcp
-echo "TUSHARE_TOKEN=你的token" > ~/.tushare_mcp/.env
+# 创建配置文件
+touch .env
+
+# 写入 Token（推荐使用 MCP 工具 setup_tushare_token 自动配置）
+echo "TUSHARE_TOKEN=你的token" >> .env
 ```
 
-### 启动服务
+### 3. 启动服务
+
+#### 方式 A: HTTP Server (SSE 模式) - 推荐
+
+适用于 Cursor 或此时同时也想查看 API 文档。
 
 ```bash
 python server.py
+# 服务将运行在 http://localhost:8000
+# SSE 端点: http://localhost:8000/sse
 ```
 
-服务运行在 `http://localhost:8000`
+#### 方式 B: Stdio 模式
 
-- 健康检查: `http://localhost:8000/`
-- API 文档: `http://localhost:8000/docs`
-- MCP 端点: `http://localhost:8000/sse`
+适用于 Claude Desktop 本地集成。
 
-## 使用
+```bash
+python server.py --stdio
+```
 
-### Claude Desktop
+## 🔌 客户端连接
 
-编辑配置文件 `~/Library/Application Support/Claude/claude_desktop_config.json`：
+### Cursor 配置
+
+1. 打开 Cursor Settings -> Features -> MCP
+2. 点击 "+ Add New MCP Server"
+3. 填写信息：
+    *   **Name**: `tushare`
+    *   **Type**: `SSE`
+    *   **URL**: `http://localhost:8000/sse`
+
+### Claude Desktop 配置
+
+编辑配置文件 `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
 ```json
 {
   "mcpServers": {
     "tushare": {
-      "url": "http://localhost:8000/sse"
+      "command": "/绝对路径/至/你的/venv/bin/python",
+      "args": [
+        "/绝对路径/至/你的/tushare_mcp/server.py",
+        "--stdio"
+      ]
     }
   }
 }
 ```
 
-重启 Claude Desktop 即可使用。
+## 🧰 工具列表
 
-### Cursor
+### 📈 基础与行情 (Stock)
+| 工具名 | 说明 |
+|:---|:---|
+| `get_stock_basic` | 获取 A 股基础信息列表（代码、名称、上市日期等） |
+| `get_trade_cal` | 获取各大交易所交易日历 |
+| `get_stock_company` | 获取上市公司基本信息（注册资本、法人、简介） |
+| `get_namechange` | 历史名称变更记录 |
+| `get_stk_managers` | 上市公司管理层主要成员 |
+| `get_daily` | A 股日线行情（开高低收、成交量）|
+| `get_weekly` / `get_monthly` | 周线 / 月线行情 |
+| `get_daily_basic` | 每日指标（换手率、量比、PE、PB、总市值） |
+| `get_suspend_d` | 每日停复牌信息 |
+| `get_hsgt_top10` | 沪深股通十大成交股 |
 
-设置 → MCP Servers → 添加：
-- 名称: `tushare`
-- URL: `http://localhost:8000/sse`
+### 💰 财务数据 (Finance)
+| 工具名 | 说明 |
+|:---|:---|
+| `get_income_statement` | 利润表 |
+| `get_balance_sheet` | 资产负债表 |
+| `get_cash_flow` | 现金流量表 |
+| `get_forecast` | 业绩预告 |
+| `get_express` | 业绩快报 |
+| `get_fina_indicator` | 财务指标数据（EPS、ROE、毛利率等） |
+| `get_fina_mainbz` | 主营业务构成 |
+| `get_disclosure_date` | 财报披露计划日期 |
 
-### HTTP API
+> 完整工具列表请查阅 `tools/` 目录或启动服务后访问 API 文档。
 
-```bash
-# 配置 Token
-curl -X POST http://localhost:8000/tools/setup_tushare_token \
-  -H "Content-Type: application/json" \
-  -d '{"token": "你的token"}'
+## 📁 项目结构
+
+```
+tushare_MCP/
+├── api_docs/           # 原始 Tushare API 文档参考
+├── mcp_test/           # MCP 工具测试记录
+├── tools/              # MCP 工具实现核心代码
+│   ├── finance/        # 财务类工具 (income, balance, cashflow...)
+│   └── stock/
+│       ├── basic/      # 基础数据工具 (stock_basic, trade_cal...)
+│       └── quote/      # 行情数据工具 (daily, weekly, hsgt...)
+├── utils/              # 通用工具函数 (logger, token_manager)
+├── server.py           # MCP Server 入口 (FastAPI + FastMCP)
+├── requirements.txt    # 项目依赖
+└── README.md           # 项目文档
 ```
 
-## 工具列表
-
-### Token 管理
-- `setup_tushare_token` - 配置 Token
-- `check_token_status` - 检查 Token 状态
-
-### 股票信息
-- `get_stock_basic_info` - A股基本信息
-- `get_hk_stock_basic` - 港股基本信息
-- `search_stocks` - 搜索股票
-
-### 行情数据
-- `get_daily_prices` - 日线行情（开高低收）
-- `get_daily_metrics` - 换手率、PE/PB
-- `get_daily_basic_info` - 股本、市值
-- `get_period_price_change` - 区间涨跌幅
-
-### 财务数据
-- `get_financial_indicator` - 财务指标
-- `get_income_statement` - 利润表
-- `get_balance_sheet` - 资产负债表
-- `get_cash_flow` - 现金流量表
-- `get_fina_mainbz` - 主营业务构成
-
-### 股东信息
-- `get_shareholder_count` - 股东户数
-- `get_top_holders` - 前十大股东
-
-### 指数数据
-- `search_index` - 搜索指数
-- `get_index_list` - 指数列表
-- `get_index_constituents` - 指数成分股
-- `get_global_index_quotes` - 国际指数行情
-
-### 特色数据
-- `get_pledge_detail` - 股权质押
-- `get_top_list_detail` - 龙虎榜
-- `get_top_institution_detail` - 龙虎榜机构席位
-
-### 工具
-- `get_trade_calendar` - 交易日历
-- `get_start_date_for_n_days` - 计算往前N个交易日
-
-## 数据格式
-
-**日期**: `YYYYMMDD`（如 `20240930`）
-
-**股票代码**:
-- A股: `000001.SZ` (深圳) / `600000.SH` (上海)
-- 港股: `00700.HK`
-- 指数: `000300.SH`
-
-**金额单位**:
-- 财务数据: 亿元
-- 股本: 万股
-- 市值: 万元
-
-## Docker 部署
-
-```bash
-docker build -t tushare-mcp .
-docker run -d -p 8000:8000 -e TUSHARE_TOKEN=你的token tushare-mcp
-```
-
-## 故障排查
-
-### Token 无效
-```bash
-# 测试 Token（使用 tinyshare）
-python3 << EOF
-import tinyshare as ts
-ts.set_token('你的token')
-print(ts.pro_api().stock_basic(ts_code='000001.SZ'))
-EOF
-```
-
-### 服务无法访问
-```bash
-# 检查服务状态
-ps aux | grep server.py
-
-# 检查端口占用
-lsof -i :8000
-```
-
-### MCP 连接失败
-```bash
-# 测试端点
-curl http://localhost:8000/
-curl http://localhost:8000/sse
-```
-
-## License
+## 📄 License
 
 MIT
+
+---
+
+<div align="center">
+  <sub>Built with ❤️ using <a href="https://github.com/modelcontextprotocol" target="_blank">MCP</a> & <a href="https://tushare.pro/" target="_blank">Tushare Pro</a></sub>
+</div>
