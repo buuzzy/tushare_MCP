@@ -46,7 +46,7 @@ import tinyshare as ts
 ## 🌟 核心功能
 
 ### 1. 🤖 完美适配主流 AI 客户端
-*   **Claude Desktop**: 标准 SSE / Stdio 模式支持，本地直接运行。
+*   **Claude Desktop**: 标准 Streamable HTTP / Stdio 模式支持，本地直接运行。
 *   **Cursor IDE**: 在编辑器中直接询问代码相关的股票数据，辅助金融编程。
 
 ### 2. 📊 全维度数据覆盖
@@ -61,14 +61,14 @@ import tinyshare as ts
 *   **自动验证**: 启动时自动检查 Token 有效性。
 
 ### 4. ⚡ 高性能架构
-*   **FastAPI 驱动**: 基于 FastAPI 构建的高性能 SSE 服务端。
+*   **Streamable HTTP**: 基于 MCP SDK 原生 Streamable HTTP 传输协议，取代旧版 SSE。
 *   **Tinyshare SDK**: 深度优化的 Tushare 接口封装，支持重试与异常处理。
 
 ## 🏗️ 技术架构
 
 ```mermaid
 graph TD
-    Client(["AI Client &#40;Claude / Cursor&#41;"]) -->|MCP Protocol &#40;SSE / Stdio&#41;| MCPServer[Tushare MCP Server]
+    Client(["AI Client &#40;Claude / Cursor&#41;"]) -->|MCP Protocol &#40;Streamable HTTP / Stdio&#41;| MCPServer[Tushare MCP Server]
     MCPServer -->|Tool Execution| Tools[Tool Implementation]
     Tools -->|Data Request| SDK[Tinyshare SDK]
     SDK -->|HTTP API| Tushare[("Tushare Pro API")]
@@ -112,14 +112,14 @@ echo "TUSHARE_TOKEN=你的token" >> .env
 
 ### 3. 启动服务
 
-#### 方式 A: HTTP Server (SSE 模式) - 推荐
+#### 方式 A: HTTP Server (Streamable HTTP 模式) - 推荐
 
-适用于 Cursor 或此时同时也想查看 API 文档。
+适用于 Cursor 等支持远程 MCP 的客户端。
 
 ```bash
 python server.py
 # 服务将运行在 http://localhost:8000
-# SSE 端点: http://localhost:8000/sse
+# MCP 端点: http://localhost:8000/mcp
 ```
 
 #### 方式 B: Stdio 模式
@@ -138,8 +138,8 @@ python server.py --stdio
 2. 点击 "+ Add New MCP Server"
 3. 填写信息：
     *   **Name**: `tushare`
-    *   **Type**: `SSE`
-    *   **URL**: `http://localhost:8000/sse`
+    *   **Type**: `Streamable HTTP`
+    *   **URL**: `http://localhost:8000/mcp`
 
 ### Claude Desktop 配置
 
