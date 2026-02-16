@@ -39,3 +39,6 @@ ENV/
 .DS_Store
 Thumbs.db 
 *.log 
+# User requested exclusions
+api_docs/
+mcp_test/
