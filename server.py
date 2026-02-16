@@ -17,6 +17,8 @@ try:
         "Tinyshare Tools Enhanced",
         host="0.0.0.0",
         port=8000,
+        json_response=True,
+        stateless_http=True,
         transport_security=TransportSecuritySettings(
             enable_dns_rebinding_protection=False,
         ),
