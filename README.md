@@ -36,7 +36,7 @@ import tinyshare as ts
 ```
 
 如果你完全不知道如何使用，请阅读下方微信文档：
-https://doc.weixin.qq.com/doc/w3_AbQAFgbhALUCN01st0nWWQfyyiN0f?scode=AJEAIQdfAAoBLLzpIHAbQAFgbhALU
+[Tushare MCP 使用说明](https://doc.weixin.qq.com/doc/w3_AbQAFgbhALUCN01st0nWWQfyyiN0f?scode=AJEAIQdfAAoBLLzpIHAbQAFgbhALU)
 
 ## 2025.02.16 重构
 
