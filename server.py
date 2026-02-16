@@ -1,11 +1,8 @@
 import sys
 import argparse
 import traceback
-import uvicorn
 from mcp.server.fastmcp import FastMCP
-from fastapi import FastAPI, HTTPException, Body
-from starlette.requests import Request
-from mcp.server.sse import SseServerTransport
+from mcp.server.transport_security import TransportSecuritySettings
 
 # Import from our new modules
 from utils.logger import log_debug
@@ -14,8 +11,16 @@ from tools import register_all_tools
 import tinyshare as ts
 
 # --- MCP Instance Creation ---
+# host=0.0.0.0 对外暴露, 关闭 DNS rebinding 保护 (由 Cloudflare Tunnel 负责安全)
 try:
-    mcp = FastMCP("Tinyshare Tools Enhanced")
+    mcp = FastMCP(
+        "Tinyshare Tools Enhanced",
+        host="0.0.0.0",
+        port=8000,
+        transport_security=TransportSecuritySettings(
+            enable_dns_rebinding_protection=False,
+        ),
+    )
     log_debug("FastMCP instance created for Tinyshare Tools Enhanced.")
 except Exception as e:
     log_debug(f"ERROR creating FastMCP: {e}")
@@ -23,7 +28,6 @@ except Exception as e:
     raise
 
 # --- Register Tools ---
-# 1. Core Token Tools (kept here or moved to a core tools module? Kept here for simplicity of initialization)
 @mcp.prompt()
 def configure_token() -> str:
     """配置Tinyshare token的提示模板"""
@@ -63,44 +67,6 @@ def check_token_status() -> str:
         traceback.print_exc(file=sys.stderr)
         return f"Token无效或已过期: {str(e)}"
 
-# 2. Register all other tools (Moved to main execution block for modularity)
-# register_all_tools(mcp) 
-# log_debug("All external tools registered.")
-
-# --- FastAPI App Creation (for SSE) ---
-app = FastAPI(title="Tinyshare MCP API", version="0.0.1")
-
-@app.get("/")
-async def read_root():
-    return {"message": "Hello World - Tinyshare MCP API is running!"}
-
-@app.post("/tools/setup_tinyshare_token", summary="Setup Tinyshare API token")
-async def api_setup_tinyshare_token(payload: dict = Body(...)):
-    token = payload.get("token")
-    if not token or not isinstance(token, str):
-        raise HTTPException(status_code=400, detail="Missing or invalid 'token'")
-    try:
-        output = setup_tinyshare_token(token=token)
-        return {"status": "success", "message": output}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-# --- SSE Integration ---
-MCP_BASE_PATH = "/sse"
-messages_full_path = f"{MCP_BASE_PATH}/messages/"
-sse_transport = SseServerTransport(messages_full_path)
-
-async def handle_mcp_sse_handshake(request: Request) -> None:
-    async with sse_transport.connect_sse(
-        request.scope, request.receive, request._send
-    ) as (read_stream, write_stream):
-        await mcp._mcp_server.run(
-            read_stream, write_stream, mcp._mcp_server.create_initialization_options()
-        )
-
-app.add_route(MCP_BASE_PATH, handle_mcp_sse_handshake, methods=["GET"])
-app.mount(messages_full_path, sse_transport.handle_post_message)
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Tushare MCP Server")
@@ -121,5 +87,5 @@ if __name__ == "__main__":
             print(f"DEBUG: Error in stdio mode: {e}", file=sys.stderr, flush=True)
             traceback.print_exc(file=sys.stderr)
     else:
-        print("DEBUG: Starting HTTP server for SSE...", file=sys.stderr, flush=True)
-        uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
+        print("DEBUG: Starting Streamable HTTP server on 0.0.0.0:8000/mcp ...", file=sys.stderr, flush=True)
+        mcp.run(transport='streamable-http')
