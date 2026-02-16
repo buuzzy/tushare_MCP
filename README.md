@@ -35,9 +35,15 @@
 import tinyshare as ts
 ```
 
-如果你完全不知道如何使用，请阅读下方微信文档：
+---
+
+如果你完全不知道如何使用，请阅读下方腾讯文档：
 [Tushare MCP 使用说明](https://doc.weixin.qq.com/doc/w3_AbQAFgbhALUCN01st0nWWQfyyiN0f?scode=AJEAIQdfAAoBLLzpIHAbQAFgbhALU)
 
+如果你想通过添加 mcp server 直接使用，忽略繁琐过程，可以联系我试用：
+微信：Buuzzy0603
+
+---
 ## 2025.02.16 重构
 
 本次迭代实现了从单文件脚本向模块化工程的重构。我们将原来的单体 server.py 拆分为 server.py (仅负责服务编排与路由)、 tools/ (按业务领域拆分的逻辑核心) 以及 utils/ (基础设施) 三层架构。此改动彻底解耦了服务启动与业务逻辑，使得每个 Tushare 接口（如行情、财务）拥有独立的文件空间，显著提升了代码的可维护性与扩展性，为后续接入更多数据源和多人协作奠定了坚实的工程基础。
