@@ -22,7 +22,8 @@ from .stock.quote.ggt_top10 import register_ggt_top10_tools
 from .stock.quote.ggt_daily import register_ggt_daily_tools
 from .stock.quote.ggt_monthly import register_ggt_monthly_tools
 # from .stock.premarket import register_stock_premarket_tools
-from .finance import register_finance_tools
+from .stock.finance import register_finance_tools
+from .fund import register_fund_tools
 
 from typing import List, Optional
 from utils.logger import log_debug
@@ -67,8 +68,7 @@ def register_all_tools(mcp, categories: Optional[List[str]] = None):
     category_map = {
         'stock': register_stock_tools,
         'finance': register_finance_tools,
-        # Future categories:
-        # 'fund': register_fund_tools,
+        'fund': register_fund_tools,
     }
     
     if not categories:

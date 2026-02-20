@@ -10,35 +10,16 @@ from utils.token_manager import set_tinyshare_token, get_tinyshare_token, get_pr
 from tools import register_all_tools
 import tinyshare as ts
 
-# --- MCP Instance Creation ---
-# host=0.0.0.0 对外暴露, 关闭 DNS rebinding 保护 (由 Cloudflare Tunnel 负责安全)
-try:
-    mcp = FastMCP(
-        "Tinyshare Tools Enhanced",
-        host="0.0.0.0",
-        port=8000,
-        json_response=True,
-        stateless_http=True,
-        transport_security=TransportSecuritySettings(
-            enable_dns_rebinding_protection=False,
-        ),
-    )
-    log_debug("FastMCP instance created for Tinyshare Tools Enhanced.")
-except Exception as e:
-    log_debug(f"ERROR creating FastMCP: {e}")
-    traceback.print_exc(file=sys.stderr)
-    raise
 
-# --- Register Tools ---
-@mcp.prompt()
-def configure_token() -> str:
+
+# Define local tools as standalone functions first
+def configure_token_impl() -> str:
     """配置Tinyshare token的提示模板"""
     return """请提供您的Tinyshare API token。
 
 请输入您的token:"""
 
-@mcp.tool()
-def setup_tinyshare_token(token: str) -> str:
+def setup_tinyshare_token_impl(token: str) -> str:
     """设置Tinyshare API token"""
     log_debug(f"Tool setup_tinyshare_token called.")
     try:
@@ -55,8 +36,7 @@ def setup_tinyshare_token(token: str) -> str:
         traceback.print_exc(file=sys.stderr)
         return f"Token配置失败：{str(e)}"
 
-@mcp.tool()
-def check_token_status() -> str:
+def check_token_status_impl() -> str:
     """检查Tinyshare token状态"""
     log_debug("Tool check_token_status called.")
     token = get_tinyshare_token()
@@ -69,15 +49,45 @@ def check_token_status() -> str:
         traceback.print_exc(file=sys.stderr)
         return f"Token无效或已过期: {str(e)}"
 
+def create_mcp_server(port: int = 8000) -> FastMCP:
+    try:
+        mcp = FastMCP(
+            "Tinyshare Tools Enhanced",
+            host="0.0.0.0", # Bind to all interfaces by default for convenience in docker/deployment
+            port=port,
+            json_response=True,
+            stateless_http=True,
+            transport_security=TransportSecuritySettings(
+                enable_dns_rebinding_protection=False,
+            ),
+        )
+        log_debug(f"FastMCP instance created for Tinyshare Tools Enhanced on port {port}.")
+        return mcp
+    except Exception as e:
+        log_debug(f"ERROR creating FastMCP: {e}")
+        traceback.print_exc(file=sys.stderr)
+        raise
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Tushare MCP Server")
     parser.add_argument("--stdio", action="store_true", help="Run in stdio mode for MCP clients")
-    parser.add_argument("--category", action="append", help="Tool category to load (e.g. 'stock'). Can be specified multiple times.")
+    parser.add_argument("--category", action="append", help="Tool category to load (e.g. 'stock', 'fund'). Can be specified multiple times.")
+    parser.add_argument("--port", type=int, default=8000, help="Port to listen on (default: 8000)")
     args = parser.parse_args()
 
-    # Register tools based on categories
+    # 1. Create Server Instance
+    mcp = create_mcp_server(port=args.port)
+
+    # 2. Register local tools
+    # Note: FastMCP.tool() and .prompt() decorators can be used as function calls if we bind them
+    # But here we use the name argument to register existing functions
+    mcp.prompt(name="configure_token")(configure_token_impl)
+    mcp.tool(name="setup_tinyshare_token")(setup_tinyshare_token_impl)
+    mcp.tool(name="check_token_status")(check_token_status_impl)
+
+    # 3. Register External Tools based on categories
     categories = args.category if args.category else None
+    print(f"DEBUG: Parsed categories: {categories}", file=sys.stderr)
     register_all_tools(mcp, categories=categories)
     log_debug(f"Registered tools with categories: {categories if categories else 'ALL'}")
 
@@ -89,5 +99,5 @@ if __name__ == "__main__":
             print(f"DEBUG: Error in stdio mode: {e}", file=sys.stderr, flush=True)
             traceback.print_exc(file=sys.stderr)
     else:
-        print("DEBUG: Starting Streamable HTTP server on 0.0.0.0:8000/mcp ...", file=sys.stderr, flush=True)
+        print(f"DEBUG: Starting Streamable HTTP server on 0.0.0.0:{args.port}/mcp ...", file=sys.stderr, flush=True)
         mcp.run(transport='streamable-http')
