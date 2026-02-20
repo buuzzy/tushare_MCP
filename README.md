@@ -44,6 +44,16 @@ import tinyshare as ts
 微信：Buuzzy0603
 
 ---
+
+```
+### stock endpoint
+https://stock-mcp.pricetrade.top/mcp
+
+### fund endpoint
+https://fund-mcp.pricetrade.top/mcp
+```
+
+---
 ## 2025.02.20 补齐 ETF、工具基金接口
 本次更新重点补齐了公募基金及 ETF 接口。同时，针对大模型（特别是数据对比与分析场景）强烈的“多代码逗号分隔查询”倾向，而底层 Tushare API 又不原生支持的痛点，我们在所有的 Fund 模块底层植入了 **“本地请求切割与合并处理器”**。该机制能够智能拦截逗号列表，在后台循环发起多次原子请求并拼接整合数据帧。
 
