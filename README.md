@@ -45,6 +45,9 @@ import tinyshare as ts
 
 ---
 
+试用端点，可免费体验 mcp tools，无需 token
+
+如果不知道如何使用，把下面这两个地址发给 AI，让它添加 mcp server
 ```
 ### stock endpoint
 https://stock-mcp.pricetrade.top/mcp
