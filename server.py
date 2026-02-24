@@ -2,8 +2,6 @@ import sys
 import argparse
 import traceback
 from mcp.server.fastmcp import FastMCP
-from mcp.server.transport_security import TransportSecuritySettings
-
 # Import from our new modules
 from utils.logger import log_debug
 from utils.token_manager import set_tinyshare_token, get_tinyshare_token, get_pro_client
@@ -55,11 +53,6 @@ def create_mcp_server(port: int = 8000) -> FastMCP:
             "Tinyshare Tools Enhanced",
             host="0.0.0.0", # Bind to all interfaces by default for convenience in docker/deployment
             port=port,
-            json_response=True,
-            stateless_http=True,
-            transport_security=TransportSecuritySettings(
-                enable_dns_rebinding_protection=False,
-            ),
         )
         log_debug(f"FastMCP instance created for Tinyshare Tools Enhanced on port {port}.")
         return mcp
@@ -99,5 +92,5 @@ if __name__ == "__main__":
             print(f"DEBUG: Error in stdio mode: {e}", file=sys.stderr, flush=True)
             traceback.print_exc(file=sys.stderr)
     else:
-        print(f"DEBUG: Starting Streamable HTTP server on 0.0.0.0:{args.port}/mcp ...", file=sys.stderr, flush=True)
-        mcp.run(transport='streamable-http')
+        print(f"DEBUG: Starting SSE server on 0.0.0.0:{args.port}/sse ...", file=sys.stderr, flush=True)
+        mcp.run(transport='sse')
