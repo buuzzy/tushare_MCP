@@ -50,10 +50,10 @@ import tinyshare as ts
 如果不知道如何使用，把下面这两个地址发给 AI，让它添加 mcp server
 ```
 ### stock endpoint
-https://stock-mcp.pricetrade.top/mcp
+https://stock-mcp.pricetrade.top/sse
 
 ### fund endpoint
-https://fund-mcp.pricetrade.top/mcp
+https://fund-mcp.pricetrade.top/sse
 ```
 
 ---
