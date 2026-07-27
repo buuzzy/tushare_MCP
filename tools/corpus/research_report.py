@@ -22,8 +22,8 @@ def register_research_report_tools(mcp):
             limit: 返回条数上限，默认20
         """
         log_debug(f"Tool research_report called: ts_code={ts_code}, trade_date={trade_date}")
-        if not any([ts_code, trade_date, start_date, report_type, inst_csname, ind_name]):
-            return "错误：至少提供一个筛选条件（ts_code/trade_date/start_date/report_type 等）"
+        if not any([ts_code, trade_date, start_date, end_date, report_type, inst_csname, ind_name]):
+            return "错误：至少提供一个筛选条件（ts_code/trade_date/start_date/end_date/report_type 等）"
 
         params = {k: v for k, v in {
             'ts_code': ts_code, 'trade_date': trade_date,

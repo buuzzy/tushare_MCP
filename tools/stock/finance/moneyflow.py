@@ -18,8 +18,8 @@ def register_moneyflow_tools(mcp):
             limit: 返回条数上限，默认20
         """
         log_debug(f"Tool moneyflow called: ts_code={ts_code}, start={start_date}, end={end_date}")
-        if not any([ts_code, trade_date, start_date]):
-            return "错误：至少提供一个筛选条件（ts_code/trade_date/start_date）"
+        if not any([ts_code, trade_date, start_date, end_date]):
+            return "错误：至少提供一个筛选条件（ts_code/trade_date/start_date/end_date）"
 
         pro = get_pro_client()
         raw_params = {
