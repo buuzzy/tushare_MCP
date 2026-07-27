@@ -26,6 +26,7 @@ def register_news_tools(mcp):
             params['src'] = src
 
         df = pro.news(**params)
+        log_debug(f"API returned: type={type(df).__name__}, empty={getattr(df, "empty", "N/A")}, shape={getattr(df, "shape", "N/A")}, columns={list(getattr(df, "columns", []))}")
         if df.empty:
             return "未找到符合条件的新闻数据"
 

@@ -33,6 +33,7 @@ def register_research_report_tools(mcp):
         }.items() if v}
         pro = get_corpus_client()
         df = pro.research_report(**params)
+        log_debug(f"API returned: type={type(df).__name__}, empty={getattr(df, "empty", "N/A")}, shape={getattr(df, "shape", "N/A")}, columns={list(getattr(df, "columns", []))}")
         if df.empty:
             return "未找到符合条件的研报数据"
 

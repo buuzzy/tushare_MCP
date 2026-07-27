@@ -15,6 +15,7 @@ def register_npr_tools(mcp):
         log_debug(f"Tool npr called: limit={limit}")
         pro = get_corpus_client()
         df = pro.npr(limit=limit)
+        log_debug(f"API returned: type={type(df).__name__}, empty={getattr(df, "empty", "N/A")}, shape={getattr(df, "shape", "N/A")}, columns={list(getattr(df, "columns", []))}")
         if df.empty:
             return "未找到政策法规数据"
 
