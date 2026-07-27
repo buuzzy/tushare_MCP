@@ -8,6 +8,7 @@ from .fina_indicator import register_fina_indicator_tools
 from .fina_audit import register_fina_audit_tools
 from .fina_mainbz import register_fina_mainbz_tools
 from .disclosure_date import register_disclosure_date_tools
+from .moneyflow import register_moneyflow_tools
 
 def register_finance_tools(mcp):
     register_income_tools(mcp)
@@ -20,3 +21,4 @@ def register_finance_tools(mcp):
     register_fina_audit_tools(mcp)
     register_fina_mainbz_tools(mcp)
     register_disclosure_date_tools(mcp)
+    register_moneyflow_tools(mcp)
