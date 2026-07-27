@@ -29,18 +29,19 @@ def register_moneyflow_tools(mcp):
             'end_date': end_date
         }
         api_params = {k: v for k, v in raw_params.items() if v}
+
+        effective_limit = limit if limit else 20
+        api_params['limit'] = effective_limit
+
         fields = 'ts_code,trade_date,net_mf_amount,buy_elg_amount,sell_elg_amount,buy_lg_amount,sell_lg_amount,buy_md_amount,sell_md_amount,buy_sm_amount,sell_sm_amount'
 
         df = pro.moneyflow(**api_params, fields=fields)
         if df.empty:
             return "未找到符合条件的资金流向数据"
 
-        # Reverse to chronological order
-        df = df.iloc[::-1].reset_index(drop=True)
-
-        # Apply display limit after fetch
-        effective_limit = limit if limit else 20
+        # API returns DESC (newest first); take newest N, then reverse to chronological
         df = df.head(effective_limit)
+        df = df.iloc[::-1].reset_index(drop=True)
 
         result = [f"--- 个股资金流向 (共 {len(df)} 天) ---"]
 
