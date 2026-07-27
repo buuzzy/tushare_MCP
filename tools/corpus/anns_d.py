@@ -27,7 +27,11 @@ def register_anns_d_tools(mcp):
         }.items() if v}
         pro = get_corpus_client()
         df = pro.anns_d(**params)
-        log_debug(f"API returned: type={type(df).__name__}, empty={getattr(df, "empty", "N/A")}, shape={getattr(df, "shape", "N/A")}, columns={list(getattr(df, "columns", []))}")
+        df_type = type(df).__name__
+        df_empty = getattr(df, "empty", "N/A")
+        df_shape = getattr(df, "shape", "N/A")
+        df_cols = list(getattr(df, "columns", []))
+        log_debug(f"API returned: type={df_type}, empty={df_empty}, shape={df_shape}, columns={df_cols}")
         if df.empty:
             return "未找到符合条件的公告数据"
 

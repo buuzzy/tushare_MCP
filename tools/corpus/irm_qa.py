@@ -26,7 +26,11 @@ def register_irm_qa_tools(mcp):
                 if method is None:
                     continue
                 df = method(**params)
-                log_debug(f"API returned: type={type(df).__name__}, empty={getattr(df, "empty", "N/A")}, shape={getattr(df, "shape", "N/A")}, columns={list(getattr(df, "columns", []))}")
+                df_type = type(df).__name__
+                df_empty = getattr(df, "empty", "N/A")
+                df_shape = getattr(df, "shape", "N/A")
+                df_cols = list(getattr(df, "columns", []))
+                log_debug(f"API returned: type={df_type}, empty={df_empty}, shape={df_shape}, columns={df_cols}")
                 if not df.empty:
                     results.append(f"--- {method_name} ({len(df)} 条) ---")
                     for _, row in df.head(10).iterrows():

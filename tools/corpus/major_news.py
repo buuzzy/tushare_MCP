@@ -21,7 +21,11 @@ def register_major_news_tools(mcp):
 
         pro = get_corpus_client()
         df = pro.major_news(start_date=start_date, end_date=end_date, limit=limit, offset=offset)
-        log_debug(f"API returned: type={type(df).__name__}, empty={getattr(df, "empty", "N/A")}, shape={getattr(df, "shape", "N/A")}, columns={list(getattr(df, "columns", []))}")
+        df_type = type(df).__name__
+        df_empty = getattr(df, "empty", "N/A")
+        df_shape = getattr(df, "shape", "N/A")
+        df_cols = list(getattr(df, "columns", []))
+        log_debug(f"API returned: type={df_type}, empty={df_empty}, shape={df_shape}, columns={df_cols}")
         if df.empty:
             return "未找到符合条件的重大新闻数据"
 
