@@ -28,7 +28,6 @@ ENV PYTHONUNBUFFERED=1
 # 设置Cloud Run期望的端口环境变量
 ENV PORT 8080
 
-# 【关键修复】使用uvicorn作为生产服务器启动您的应用
-# 这将确保应用监听在 0.0.0.0 和 Cloud Run 提供的 $PORT 端口上
-# "server:app" -> server.py 文件中的 app 实例
-CMD exec uvicorn server:app --host 0.0.0.0 --port $PORT
+# FastMCP starts its own server (SSE transport) with the port from --port arg.
+# Pass PORT env so Railway can route traffic.
+CMD exec python server.py --port ${PORT:-8000}
