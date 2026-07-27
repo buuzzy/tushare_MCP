@@ -34,7 +34,8 @@ def register_daily_basic_tools(mcp):
         results = [f"--- 每日基本面指标 (Total: {len(df)}) ---"]
         
         # Limit display for large results
-        df_limited = df.head(50) 
+        df_limited = df.head(50)
+        df_limited = df_limited.iloc[::-1].reset_index(drop=True)  # chronological order for charts 
         
         for _, row in df_limited.iterrows():
              info = []

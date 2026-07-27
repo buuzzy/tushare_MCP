@@ -23,6 +23,7 @@ def register_forecast_tools(mcp):
         """
         log_debug(f"Tool forecast called with ts_code='{ts_code}', period='{period}'...")
         pro = get_pro_client()
+        effective_limit = limit if limit else 10  # default 10 records
         params = {
             'ts_code': ts_code,
             'ann_date': ann_date,
@@ -30,7 +31,7 @@ def register_forecast_tools(mcp):
             'end_date': end_date,
             'period': period,
             'type': type,
-            'limit': limit,
+            'limit': effective_limit,
             'offset': offset
         }
         # Filter out empty params
@@ -42,6 +43,9 @@ def register_forecast_tools(mcp):
         df = pro.forecast(**api_params, fields=fields)
         if df.empty:
             return "未找到符合条件的业绩预告数据"
+
+        # Reverse to chronological order
+        df = df.iloc[::-1].reset_index(drop=True)
 
         result = [f"--- size: {len(df)} ---"]
         

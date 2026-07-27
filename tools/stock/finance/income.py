@@ -25,6 +25,9 @@ def register_income_tools(mcp):
         """
         log_debug(f"Tool income called with ts_code='{ts_code}', period='{period}'...")
         pro = get_pro_client()
+
+        # Default to 8 periods (2 years) when no limit
+        effective_limit = limit if limit else 8
         params = {
             'ts_code': ts_code,
             'ann_date': ann_date,
@@ -34,7 +37,7 @@ def register_income_tools(mcp):
             'period': period,
             'report_type': report_type,
             'comp_type': comp_type,
-            'limit': limit,
+            'limit': effective_limit,
             'offset': offset
         }
         # Filter out empty params
@@ -47,15 +50,12 @@ def register_income_tools(mcp):
         if df.empty:
             return "未找到符合条件的利润表数据"
 
-        result = [f"--- size: {len(df)} ---"]
-        
-        # Display cap
-        display_cap = 20
-        # If user explicitly set a limit that is smaller, use that.
-        if limit and limit < display_cap:
-             display_cap = limit
-             
-        display_df = df.head(display_cap)
+        # Reverse to chronological order for trend charts
+        df = df.iloc[::-1].reset_index(drop=True)
+
+        result = [f"--- 财务数据 (共 {len(df)} 期) ---"]
+
+        display_df = df
         
         def format_money(val):
             if pd.isna(val):
@@ -94,8 +94,6 @@ def register_income_tools(mcp):
 
             result.append(" | ".join(info_parts))
             
-        if len(df) > display_cap:
-             result.append(f"... (共 {len(df)} 条，仅显示前 {display_cap} 条)")
              
         # Add a note about the full data
         result.append("\n(更多字段请在代码中查看 'fields' 列表)")

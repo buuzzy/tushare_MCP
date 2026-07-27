@@ -35,7 +35,8 @@ def register_monthly_tools(mcp):
         
         # Limit display for large results if no specific date or code is provided, but usually user asks specific questions.
         # If result is large, limit to 50.
-        df_limited = df.head(50) 
+        df_limited = df.head(50)
+        df_limited = df_limited.iloc[::-1].reset_index(drop=True)  # chronological order for charts 
         
         for _, row in df_limited.iterrows():
              info = []

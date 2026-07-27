@@ -61,6 +61,7 @@ def register_fund_daily_tools(mcp):
         result = [f"--- size: {len(df)} ---"]
         display_cap = 50
         display_df = df.head(display_cap)
+        display_df = display_df.iloc[::-1].reset_index(drop=True)  # chronological for charts
         
         for _, row in display_df.iterrows():
             info_parts = []
