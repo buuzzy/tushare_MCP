@@ -25,8 +25,13 @@ def register_research_report_tools(mcp):
         if not any([ts_code, trade_date, start_date, report_type, inst_csname, ind_name]):
             return "错误：至少提供一个筛选条件（ts_code/trade_date/start_date/report_type 等）"
 
+        params = {k: v for k, v in {
+            'ts_code': ts_code, 'trade_date': trade_date,
+            'start_date': start_date, 'end_date': end_date,
+            'report_type': report_type, 'inst_csname': inst_csname,
+            'ind_name': ind_name, 'limit': limit,
+        }.items() if v}
         pro = get_corpus_client()
-        params = {k: v for k, v in locals().items() if v and k != 'mcp'}
         df = pro.research_report(**params)
         if df.empty:
             return "未找到符合条件的研报数据"

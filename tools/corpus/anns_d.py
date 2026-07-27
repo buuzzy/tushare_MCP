@@ -21,8 +21,11 @@ def register_anns_d_tools(mcp):
         if not any([ts_code, trade_date, start_date]):
             return "错误：至少提供一个筛选条件（ts_code/trade_date/start_date）"
 
+        params = {k: v for k, v in {
+            'ts_code': ts_code, 'trade_date': trade_date,
+            'start_date': start_date, 'end_date': end_date, 'limit': limit,
+        }.items() if v}
         pro = get_corpus_client()
-        params = {k: v for k, v in locals().items() if v and k != 'mcp'}
         df = pro.anns_d(**params)
         if df.empty:
             return "未找到符合条件的公告数据"
