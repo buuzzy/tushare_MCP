@@ -15,7 +15,10 @@ WORKDIR /app
 
 # 复制并安装Python依赖，利用层缓存机制
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir \
+    --extra-index-url https://tinydoc.pages.dev/simple/ \
+    --extra-index-url https://minidoc.pages.dev/simple/ \
+    -r requirements.txt
 
 # 复制其余所有项目文件
 COPY . .

@@ -56,3 +56,35 @@ def get_pro_client():
     if not token:
         raise ValueError("Tinyshare token not configured")
     return ts.pro_api(token)
+
+
+# ============================================================================
+# Minishare token management (语料/资讯类接口)
+# ============================================================================
+
+def get_minishare_token() -> Optional[str]:
+    """获取Minishare token（语料授权码）"""
+    log_debug("get_minishare_token called.")
+    init_env_file()
+    token = os.getenv("MINISHARE_TOKEN")
+    log_debug(f"get_minishare_token: os.getenv result: {'TOKEN_FOUND' if token else 'NOT_FOUND'}")
+    return token
+
+def set_minishare_token(token: str):
+    """设置Minishare token"""
+    log_debug("set_minishare_token called.")
+    init_env_file()
+    try:
+        set_key(ENV_FILE, "MINISHARE_TOKEN", token)
+        log_debug("set_key executed for MINISHARE_TOKEN")
+    except Exception as e_set_token:
+        log_debug(f"ERROR in set_minishare_token: {str(e_set_token)}")
+        traceback.print_exc(file=sys.stderr)
+
+def get_corpus_client():
+    """Helper to get an authenticated minishare pro client for corpus/news endpoints"""
+    token = get_minishare_token()
+    if not token:
+        raise ValueError("Minishare token not configured")
+    import minishare as ms
+    return ms.pro_api(token)

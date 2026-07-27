@@ -24,6 +24,7 @@ from .stock.quote.ggt_monthly import register_ggt_monthly_tools
 # from .stock.premarket import register_stock_premarket_tools
 from .stock.finance import register_finance_tools
 from .fund import register_fund_tools
+from .corpus import register_corpus_tools
 
 from typing import List, Optional
 from utils.logger import log_debug
@@ -69,6 +70,7 @@ def register_all_tools(mcp, categories: Optional[List[str]] = None):
         'stock': register_stock_tools,
         'finance': register_finance_tools,
         'fund': register_fund_tools,
+        'corpus': register_corpus_tools,
     }
     
     if not categories:
@@ -85,4 +87,3 @@ def register_all_tools(mcp, categories: Optional[List[str]] = None):
                 log_debug(f"Registered tool category: {category}")
             else:
                 log_debug(f"Warning: Unknown tool category '{category}' skipped.")
-
