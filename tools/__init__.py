@@ -21,6 +21,8 @@ from .stock.quote.hsgt_top10 import register_hsgt_top10_tools
 from .stock.quote.ggt_top10 import register_ggt_top10_tools
 from .stock.quote.ggt_daily import register_ggt_daily_tools
 from .stock.quote.ggt_monthly import register_ggt_monthly_tools
+
+from .stock.quote.top_list import register_top_list_tools
 # from .stock.premarket import register_stock_premarket_tools
 from .stock.finance import register_finance_tools
 from .fund import register_fund_tools
@@ -53,6 +55,7 @@ def register_stock_tools(mcp):
     register_ggt_top10_tools(mcp)
     register_ggt_daily_tools(mcp)
     register_ggt_monthly_tools(mcp)
+    register_top_list_tools(mcp)
     # register_stock_premarket_tools(mcp)
     register_finance_tools(mcp)
 
