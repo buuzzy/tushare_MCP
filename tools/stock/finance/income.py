@@ -9,7 +9,7 @@ def register_income_tools(mcp):
                end_date: str = "", period: str = "", report_type: str = "", comp_type: str = "", 
                limit: int = None, offset: int = None) -> str:
         """
-        获取上市公司财务利润表数据。(对应 tushare income 接口)
+        获取上市公司财务利润表数据。
 
         参数:
             ts_code: 股票代码

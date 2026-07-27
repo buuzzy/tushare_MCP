@@ -7,7 +7,7 @@ def register_stock_st_tools(mcp):
     @handle_exception
     def stock_st(ts_code: str = '', trade_date: str = '', start_date: str = '', end_date: str = '', exchange: str = '', limit: int = None, offset: int = None) -> str:
         """
-        获取ST股票列表，可根据交易日期获取历史上每天的ST列表。(对应 tushare stock_st 接口)
+        获取ST股票列表，可根据交易日期获取历史上每天的ST列表。
         
         参数:
             ts_code: 股票代码 (可选)

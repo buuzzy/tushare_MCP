@@ -8,7 +8,7 @@ def register_stock_basic_tools(mcp):
     def stock_basic(ts_code: str = "", name: str = "", exchange: str = "", market: str = "", 
                    is_hs: str = "", list_status: str = "L", area: str = "", industry: str = "", limit: int = None, offset: int = None) -> str:
         """
-        获取基础信息数据，包括股票代码、名称、上市日期、退市日期等。(对应 tushare stock_basic 接口)
+        获取基础信息数据，包括股票代码、名称、上市日期、退市日期等。
         
         参数:
             ts_code: 股票代码（支持多个股票同时提取，逗号分隔）

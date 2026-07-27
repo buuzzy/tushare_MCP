@@ -7,7 +7,7 @@ def register_st_tools(mcp):
     @handle_exception
     def st(ts_code: str = '', pub_date: str = '', imp_date: str = '', limit: int = None, offset: int = None) -> str:
         """
-        获取ST风险警示板股票列表。(对应 tushare st 接口)
+        获取ST风险警示板股票列表。
         
         参数:
             ts_code: 股票代码 (可选)

@@ -8,7 +8,7 @@ def register_fina_audit_tools(mcp):
     def fina_audit(ts_code: str = "", ann_date: str = "", start_date: str = "", 
                end_date: str = "", period: str = "", limit: int = None, offset: int = None) -> str:
         """
-        获取上市公司定期财务审计意见数据。(对应 tushare fina_audit 接口)
+        获取上市公司定期财务审计意见数据。
 
         参数:
             ts_code: 股票代码

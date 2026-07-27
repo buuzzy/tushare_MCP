@@ -8,7 +8,7 @@ def register_fina_indicator_tools(mcp):
     def fina_indicator(ts_code: str = "", ann_date: str = "", start_date: str = "", 
                end_date: str = "", period: str = "", limit: int = None, offset: int = None) -> str:
         """
-        获取上市公司财务指标数据。(对应 tushare fina_indicator 接口)
+        获取上市公司财务指标数据。
 
         参数:
             ts_code: 股票代码

@@ -4,11 +4,11 @@ import traceback
 from mcp.server.fastmcp import FastMCP
 from utils.logger import log_debug
 from utils.token_manager import (
-    set_tinyshare_token, get_tinyshare_token,
-    set_minishare_token, get_minishare_token,
+    set_data_token, get_data_token,
+    set_corpus_token, get_corpus_token,
 )
 from tools import register_all_tools
-import tinyshare as ts
+import tinyshare as ts  # minishare 数据 SDK（pip 包名仍为 tinyshare）
 
 
 # ---------------------------------------------------------------------------
@@ -19,8 +19,8 @@ def setup_data_token_impl(token: str) -> str:
     """设置行情/财报数据授权码"""
     log_debug("Tool setup_data_token called.")
     try:
-        set_tinyshare_token(token)
-        current = get_tinyshare_token()
+        set_data_token(token)
+        current = get_data_token()
         if not current:
             return "Token 配置未能验证，请重试。"
         ts.pro_api(current)
@@ -35,7 +35,7 @@ def setup_corpus_token_impl(token: str) -> str:
     """设置资讯/语料授权码"""
     log_debug("Tool setup_corpus_token called.")
     try:
-        set_minishare_token(token)
+        set_corpus_token(token)
         return "资讯语料授权码配置成功！"
     except Exception as e:
         log_debug(f"ERROR in setup_corpus_token: {str(e)}")
@@ -46,8 +46,8 @@ def setup_corpus_token_impl(token: str) -> str:
 def check_token_status_impl() -> str:
     """检查授权码状态"""
     log_debug("Tool check_token_status called.")
-    data_token = get_tinyshare_token()
-    corpus_token = get_minishare_token()
+    data_token = get_data_token()
+    corpus_token = get_corpus_token()
     parts = []
     if data_token:
         try:

@@ -4,7 +4,7 @@ import functools
 import traceback
 
 # Logger for debugging
-logger = logging.getLogger("tushare_mcp")
+logger = logging.getLogger("minishare_mcp")
 logger.setLevel(logging.INFO)
 
 # Create logging handler

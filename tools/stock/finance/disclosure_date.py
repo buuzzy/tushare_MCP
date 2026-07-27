@@ -8,7 +8,7 @@ def register_disclosure_date_tools(mcp):
     def disclosure_date(ts_code: str = "", end_date: str = "", pre_date: str = "", 
                actual_date: str = "", limit: int = None, offset: int = None) -> str:
         """
-        获取上市公司的财报披露计划日期。(对应 tushare disclosure_date 接口)
+        获取上市公司的财报披露计划日期。
 
         参数:
             ts_code: 股票代码

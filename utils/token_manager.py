@@ -4,10 +4,10 @@ import traceback
 from pathlib import Path
 from typing import Optional
 from dotenv import load_dotenv, set_key
-import tinyshare as ts
+import tinyshare as ts  # minishare 数据 SDK（pip 包名仍为 tinyshare）
 from .logger import log_debug
 
-ENV_FILE = Path.home() / ".tinyshare_mcp" / ".env"
+ENV_FILE = Path.home() / ".minishare_mcp" / ".env"
 log_debug(f"ENV_FILE path resolved to: {ENV_FILE}")
 
 def init_env_file():
@@ -29,62 +29,62 @@ def init_env_file():
         log_debug(f"ERROR in init_env_file filesystem operations: {str(e_fs)}")
         traceback.print_exc(file=sys.stderr)
 
-def get_tinyshare_token() -> Optional[str]:
-    """获取Tinyshare token"""
-    log_debug("get_tinyshare_token called.")
+def get_data_token() -> Optional[str]:
+    """获取数据授权码（行情/财报类）"""
+    log_debug("get_data_token called.")
     init_env_file()
-    token = os.getenv("TINYSHARE_TOKEN")
-    log_debug(f"get_tinyshare_token: os.getenv result: {'TOKEN_FOUND' if token else 'NOT_FOUND'}")
+    token = os.getenv("TINYSHARE_TOKEN") or os.getenv("MINISHARE_DATA_TOKEN")
+    log_debug(f"get_data_token: os.getenv result: {'TOKEN_FOUND' if token else 'NOT_FOUND'}")
     return token
 
-def set_tinyshare_token(token: str):
-    """设置Tinyshare token"""
-    log_debug(f"set_tinyshare_token called with token: {'********' if token else 'None'}")
+def set_data_token(token: str):
+    """设置数据授权码"""
+    log_debug(f"set_data_token called with token: {'********' if token else 'None'}")
     init_env_file()
     try:
-        set_key(ENV_FILE, "TINYSHARE_TOKEN", token)
-        log_debug(f"set_key executed for ENV_FILE: {ENV_FILE}")
+        set_key(ENV_FILE, "MINISHARE_DATA_TOKEN", token)
+        log_debug(f"set_key executed for data token")
         ts.set_token(token)
-        log_debug("ts.set_token(token) executed.")
-    except Exception as e_set_token:
-        log_debug(f"ERROR in set_tinyshare_token during set_key or ts.set_token: {str(e_set_token)}")
+        log_debug("data SDK set_token executed.")
+    except Exception as e:
+        log_debug(f"ERROR in set_data_token: {str(e)}")
         traceback.print_exc(file=sys.stderr)
 
 def get_pro_client():
-    """Helper to get an authenticated tinyshare pro client"""
-    token = get_tinyshare_token()
+    """Helper to get an authenticated data pro client"""
+    token = get_data_token()
     if not token:
-        raise ValueError("Tinyshare token not configured")
+        raise ValueError("Data token not configured")
     return ts.pro_api(token)
 
 
 # ============================================================================
-# Minishare token management (语料/资讯类接口)
+# Corpus token management (语料/资讯类接口)
 # ============================================================================
 
-def get_minishare_token() -> Optional[str]:
-    """获取Minishare token（语料授权码）"""
-    log_debug("get_minishare_token called.")
+def get_corpus_token() -> Optional[str]:
+    """获取语料授权码（新闻/研报/公告类）"""
+    log_debug("get_corpus_token called.")
     init_env_file()
-    token = os.getenv("MINISHARE_TOKEN")
-    log_debug(f"get_minishare_token: os.getenv result: {'TOKEN_FOUND' if token else 'NOT_FOUND'}")
+    token = os.getenv("MINISHARE_TOKEN") or os.getenv("MINISHARE_CORPUS_TOKEN")
+    log_debug(f"get_corpus_token: os.getenv result: {'TOKEN_FOUND' if token else 'NOT_FOUND'}")
     return token
 
-def set_minishare_token(token: str):
-    """设置Minishare token"""
-    log_debug("set_minishare_token called.")
+def set_corpus_token(token: str):
+    """设置语料授权码"""
+    log_debug("set_corpus_token called.")
     init_env_file()
     try:
-        set_key(ENV_FILE, "MINISHARE_TOKEN", token)
-        log_debug("set_key executed for MINISHARE_TOKEN")
-    except Exception as e_set_token:
-        log_debug(f"ERROR in set_minishare_token: {str(e_set_token)}")
+        set_key(ENV_FILE, "MINISHARE_CORPUS_TOKEN", token)
+        log_debug("set_key executed for corpus token")
+    except Exception as e:
+        log_debug(f"ERROR in set_corpus_token: {str(e)}")
         traceback.print_exc(file=sys.stderr)
 
 def get_corpus_client():
-    """Helper to get an authenticated minishare pro client for corpus/news endpoints"""
-    token = get_minishare_token()
+    """Helper to get an authenticated corpus pro client for news/research endpoints"""
+    token = get_corpus_token()
     if not token:
-        raise ValueError("Minishare token not configured")
+        raise ValueError("Corpus token not configured")
     import minishare as ms
     return ms.pro_api(token)

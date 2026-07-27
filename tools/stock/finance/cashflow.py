@@ -9,7 +9,7 @@ def register_cashflow_tools(mcp):
                end_date: str = "", period: str = "", report_type: str = "", comp_type: str = "", 
                is_calc: int = None, limit: int = None, offset: int = None) -> str:
         """
-        获取上市公司现金流量表数据。(对应 tushare cashflow 接口)
+        获取上市公司现金流量表数据。
 
         参数:
             ts_code: 股票代码

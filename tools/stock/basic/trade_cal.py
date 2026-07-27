@@ -7,7 +7,7 @@ def register_trade_calendar_tools(mcp):
     @handle_exception
     def trade_cal(exchange: str = '', start_date: str = '', end_date: str = '', is_open: str = '') -> str:
         """
-        获取各大交易所交易日历数据。(对应 tushare trade_cal 接口)
+        获取各大交易所交易日历数据。
         
         参数:
             exchange: 交易所 SSE上交所 SZSE深交所 CFFEX中金所 SHFE上期所 CZCE郑商所 DCE大商所 INE上能源

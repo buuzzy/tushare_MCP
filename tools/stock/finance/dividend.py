@@ -9,7 +9,7 @@ def register_dividend_tools(mcp):
                ex_date: str = "", imp_ann_date: str = "", 
                limit: int = None, offset: int = None) -> str:
         """
-        获取上市公司分红送股数据。(对应 tushare dividend 接口)
+        获取上市公司分红送股数据。
 
         参数:
             ts_code: 股票代码

@@ -8,7 +8,7 @@ def register_fina_mainbz_tools(mcp):
     def fina_mainbz(ts_code: str = "", period: str = "", type: str = "P", 
                start_date: str = "", end_date: str = "", limit: int = None, offset: int = None) -> str:
         """
-        获取上市公司主营业务构成，分地区和产品两种方式。(对应 tushare fina_mainbz 接口)
+        获取上市公司主营业务构成，分地区和产品两种方式。
 
         参数:
             ts_code: 股票代码

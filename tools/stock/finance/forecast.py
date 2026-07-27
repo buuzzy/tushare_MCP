@@ -9,7 +9,7 @@ def register_forecast_tools(mcp):
                end_date: str = "", period: str = "", type: str = "", 
                limit: int = None, offset: int = None) -> str:
         """
-        获取上市公司业绩预告数据。(对应 tushare forecast 接口)
+        获取上市公司业绩预告数据。
 
         参数:
             ts_code: 股票代码
