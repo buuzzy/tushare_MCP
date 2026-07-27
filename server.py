@@ -66,6 +66,45 @@ def check_token_status_impl() -> str:
     return " | ".join(parts)
 
 
+# Aliases: maps hallucinated tool names to the correct registered name.
+TOOL_ALIASES = {
+    "balance_sheet": "balancesheet",
+    "cash_flow": "cashflow",
+    "financial_indicator": "fina_indicator",
+    "daily_quote": "daily",
+    "income_statement": "income",
+    "balance_sheet_data": "balancesheet",
+    "cash_flow_statement": "cashflow",
+    "dividend_data": "dividend",
+    "news_search": "news",
+    "research_reports": "research_report",
+    "announcements": "anns_d",
+    "announcement": "anns_d",
+    "stock_data": "daily",
+    "stock_quote": "daily",
+    "market_data": "daily",
+    "financial_data": "fina_indicator",
+    "company_info": "stock_company",
+    "basic_info": "stock_basic",
+    "fund_data": "fund_daily",
+    "fund_info": "fund_nav",
+    "stk_holder_number": "stk_holdernumber",
+    "holder_number": "stk_holdernumber",
+    "top_holders": "stk_holdernumber",
+}
+
+def register_tool_aliases(mcp: FastMCP):
+    """Register alias names so model-hallucinated tool calls resolve correctly."""
+    tm = mcp._tool_manager
+    for alias, real_name in TOOL_ALIASES.items():
+        if real_name not in tm._tools:
+            continue
+        if alias in tm._tools:
+            continue
+        real_tool = tm._tools[real_name]
+        tm.add_tool(real_tool.fn, name=alias, description=real_tool.description)
+        log_debug(f"Registered alias '{alias}' -> '{real_name}'")
+
 def create_mcp_server(port: int = 8000) -> FastMCP:
     mcp = FastMCP(
         "Minishare Data Service",
@@ -95,6 +134,9 @@ if __name__ == "__main__":
     print(f"Categories: {categories}", file=sys.stderr)
     register_all_tools(mcp, categories=categories)
     log_debug(f"Registered tools: {categories if categories else 'ALL'}")
+
+    # Register aliases for tool names that models commonly hallucinate
+    register_tool_aliases(mcp)
 
     if args.stdio:
         print("Starting in stdio mode...", file=sys.stderr, flush=True)
