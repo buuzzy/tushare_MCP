@@ -21,18 +21,23 @@ def register_moneyflow_tools(mcp):
         if not any([ts_code, trade_date, start_date]):
             return "错误：至少提供一个筛选条件（ts_code/trade_date/start_date）"
 
-       pro = get_pro_client()
-        raw_params = {'ts_code': ts_code, 'trade_date': trade_date,
-                      'start_date': start_date, 'end_date': end_date}
+        pro = get_pro_client()
+        raw_params = {
+            'ts_code': ts_code,
+            'trade_date': trade_date,
+            'start_date': start_date,
+            'end_date': end_date
+        }
         api_params = {k: v for k, v in raw_params.items() if v}
-       fields = 'ts_code,trade_date,net_mf_amount,buy_elg_amount,sell_elg_amount,buy_lg_amount,sell_lg_amount,buy_md_amount,sell_md_amount,buy_sm_amount,sell_sm_amount'
+        fields = 'ts_code,trade_date,net_mf_amount,buy_elg_amount,sell_elg_amount,buy_lg_amount,sell_lg_amount,buy_md_amount,sell_md_amount,buy_sm_amount,sell_sm_amount'
 
         df = pro.moneyflow(**api_params, fields=fields)
-       if df.empty:
-           return "未找到符合条件的资金流向数据"
+        if df.empty:
+            return "未找到符合条件的资金流向数据"
 
-       # Reverse to chronological order
-       df = df.iloc[::-1].reset_index(drop=True)
+        # Reverse to chronological order
+        df = df.iloc[::-1].reset_index(drop=True)
+
         # Apply display limit after fetch
         effective_limit = limit if limit else 20
         df = df.head(effective_limit)
@@ -51,31 +56,26 @@ def register_moneyflow_tools(mcp):
 
         for _, row in df.iterrows():
             parts = []
-            if pd.notna(row.get('trade_date')): parts.append(f"日期:{row['trade_date']}")
+            if pd.notna(row.get('trade_date')):
+                parts.append(f"日期:{row['trade_date']}")
 
-            # Net money flow (main metric)
             if pd.notna(row.get('net_mf_amount')):
                 nmf = row['net_mf_amount']
                 direction = "净流入" if nmf >= 0 else "净流出"
                 parts.append(f"主力{direction}:{fmt(nmf)}")
 
-            # Extra-large + large orders = "主力" breakdown
-            elg_net = None
             if pd.notna(row.get('buy_elg_amount')) and pd.notna(row.get('sell_elg_amount')):
                 elg_net = row['buy_elg_amount'] - row['sell_elg_amount']
                 parts.append(f"超大单:{fmt(elg_net)}")
 
-            lg_net = None
             if pd.notna(row.get('buy_lg_amount')) and pd.notna(row.get('sell_lg_amount')):
                 lg_net = row['buy_lg_amount'] - row['sell_lg_amount']
                 parts.append(f"大单:{fmt(lg_net)}")
 
-            md_net = None
             if pd.notna(row.get('buy_md_amount')) and pd.notna(row.get('sell_md_amount')):
                 md_net = row['buy_md_amount'] - row['sell_md_amount']
                 parts.append(f"中单:{fmt(md_net)}")
 
-            sm_net = None
             if pd.notna(row.get('buy_sm_amount')) and pd.notna(row.get('sell_sm_amount')):
                 sm_net = row['buy_sm_amount'] - row['sell_sm_amount']
                 parts.append(f"小单:{fmt(sm_net)}")
