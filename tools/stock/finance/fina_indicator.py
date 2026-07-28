@@ -8,16 +8,19 @@ def register_fina_indicator_tools(mcp):
     def fina_indicator(ts_code: str = "", ann_date: str = "", start_date: str = "",
                end_date: str = "", period: str = "", limit: int = None, offset: int = None) -> str:
         """
-        获取上市公司财务指标数据。
+        获取上市公司财务指标数据（含ROE、毛利率、净利率、资产负债率、流动比率、速动比率等）。
+        默认返回最近12期（3年），适合趋势分析。
 
         参数:
             ts_code: 股票代码
-            ann_date: 公告日期（YYYYMMDD格式）
-            start_date: 报告期开始日期
-            end_date: 报告期结束日期
-            period: 报告期(每个季度最后一天的日期，比如20171231表示年报)
-            limit: 单次返回数据长度（默认12，即近3年）
-            offset: 请求数据的开始位移量
+            period: 报告期（精确匹配，指定后只返回该期单条）。趋势分析时请省略此参数
+            start_date / end_date: 报告期日期范围
+            limit: 返回条数，默认12（近3年）。趋势分析请直接设置更大值，而非逐期调用
+            offset: 位移量
+
+        用法:
+            - 多期趋势: fina_indicator(ts_code="300760.SZ", limit=12)
+            - 查单期: fina_indicator(ts_code="300760.SZ", period="20251231")
         """
         log_debug(f"Tool fina_indicator called with ts_code='{ts_code}', period='{period}'...")
         pro = get_pro_client()

@@ -9,19 +9,19 @@ def register_balancesheet_tools(mcp):
                end_date: str = "", period: str = "", report_type: str = "", comp_type: str = "", 
                limit: int = None, offset: int = None) -> str:
         """
-        获取上市公司资产负债表数据。
+        获取上市公司资产负债表数据。支持多期趋势查询。
 
         参数:
             ts_code: 股票代码
-            ann_date: 公告日期（YYYYMMDD格式）
-            f_ann_date: 实际公告日期
-            start_date: 公告日开始日期
-            end_date: 公告日结束日期
-            period: 报告期(每个季度最后一天的日期，比如20171231表示年报)
-            report_type: 报告类型，参考文档说明 (1合并报表, 2单季合并, 3调整单季合并表, 4调整合并报表, 5调整前合并报表, 6母公司报表, 7母公司单季表, 8母公司调整单季表, 9母公司调整表, 10母公司调整前报表, 11母公司调整前合并报表, 12母公司调整前报表)
-            comp_type: 公司类型（1一般工商业 2银行 3保险 4证券）
-            limit: 单次返回数据长度
-            offset: 请求数据的开始位移量
+            period: 报告期（精确匹配，指定后只返回该期单条）。趋势分析时请省略此参数，用 limit 替代
+            report_type: 报告类型 (1合并报表 2单季合并 5调整前合并)，趋势分析建议指定 report_type=1
+            start_date / end_date: 公告日期范围
+            limit: 返回条数，默认8。趋势分析请设 limit=12 或更大，而非逐期调用
+            offset: 位移量
+
+        用法:
+            - 多期趋势: balancesheet(ts_code="300760.SZ", limit=12, report_type="1")
+            - 查单期: balancesheet(ts_code="300760.SZ", period="20251231")
         """
         log_debug(f"Tool balancesheet called with ts_code='{ts_code}', period='{period}'...")
         pro = get_pro_client()
