@@ -20,6 +20,8 @@ def register_fina_mainbz_tools(mcp):
             offset: 请求数据的开始位移量
         """
         log_debug(f"Tool fina_mainbz called with ts_code='{ts_code}', period='{period}', type='{type}'...")
+        if not ts_code:
+            return "错误：必须提供 ts_code 参数（股票代码），否则会返回随机公司的数据"
         pro = get_pro_client()
         params = {
             'ts_code': ts_code,

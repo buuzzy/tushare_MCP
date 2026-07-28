@@ -22,6 +22,8 @@ def register_forecast_tools(mcp):
             offset: 请求数据的开始位移量
         """
         log_debug(f"Tool forecast called with ts_code='{ts_code}', period='{period}'...")
+        if not ts_code:
+            return "错误：必须提供 ts_code 参数（股票代码），否则会返回随机公司的数据"
         pro = get_pro_client()
         effective_limit = limit if limit else 10  # default 10 records
         params = {
