@@ -89,8 +89,23 @@ def register_balancesheet_tools(mcp):
             # Add some key financial metrics for quick view
             if pd.notna(row.get('total_assets')): info_parts.append(f"总资产: {format_money(row['total_assets'])}")
             if pd.notna(row.get('total_liab')): info_parts.append(f"总负债: {format_money(row['total_liab'])}")
+            if pd.notna(row.get('total_cur_assets')): info_parts.append(f"流动资产: {format_money(row['total_cur_assets'])}")
+            if pd.notna(row.get('total_cur_liab')): info_parts.append(f"流动负债: {format_money(row['total_cur_liab'])}")
+            if pd.notna(row.get('total_nca')): info_parts.append(f"非流动资产: {format_money(row['total_nca'])}")
+            if pd.notna(row.get('total_ncl')): info_parts.append(f"非流动负债: {format_money(row['total_ncl'])}")
             if pd.notna(row.get('total_hldr_eqy_exc_min_int')): info_parts.append(f"股东权益: {format_money(row['total_hldr_eqy_exc_min_int'])}")
             if pd.notna(row.get('money_cap')): info_parts.append(f"货币资金: {format_money(row['money_cap'])}")
+            if pd.notna(row.get('inventories')): info_parts.append(f"存货: {format_money(row['inventories'])}")
+            if pd.notna(row.get('accounts_receiv')): info_parts.append(f"应收账款: {format_money(row['accounts_receiv'])}")
+            if pd.notna(row.get('prepayment')): info_parts.append(f"预付款项: {format_money(row['prepayment'])}")
+            if pd.notna(row.get('fix_assets')): info_parts.append(f"固定资产: {format_money(row['fix_assets'])}")
+            if pd.notna(row.get('intan_assets')): info_parts.append(f"无形资产: {format_money(row['intan_assets'])}")
+            if pd.notna(row.get('goodwill')): info_parts.append(f"商誉: {format_money(row['goodwill'])}")
+            if pd.notna(row.get('st_borr')): info_parts.append(f"短期借款: {format_money(row['st_borr'])}")
+            if pd.notna(row.get('lt_borr')): info_parts.append(f"长期借款: {format_money(row['lt_borr'])}")
+            if pd.notna(row.get('notes_payable')): info_parts.append(f"应付票据: {format_money(row['notes_payable'])}")
+            if pd.notna(row.get('acct_payable')): info_parts.append(f"应付账款: {format_money(row['acct_payable'])}")
+            if pd.notna(row.get('contract_liab')): info_parts.append(f"合同负债: {format_money(row['contract_liab'])}")
 
             result.append(" | ".join(info_parts))
             

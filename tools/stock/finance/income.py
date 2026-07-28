@@ -89,6 +89,15 @@ def register_income_tools(mcp):
             # Add some key financial metrics for quick view
             if pd.notna(row.get('basic_eps')): info_parts.append(f"EPS: {row['basic_eps']}")
             if pd.notna(row.get('total_revenue')): info_parts.append(f"营收: {format_money(row['total_revenue'])}")
+            if pd.notna(row.get('total_cogs')): info_parts.append(f"营业总成本: {format_money(row['total_cogs'])}")
+            if pd.notna(row.get('oper_cost')): info_parts.append(f"营业成本: {format_money(row['oper_cost'])}")
+            if pd.notna(row.get('sell_exp')): info_parts.append(f"销售费用: {format_money(row['sell_exp'])}")
+            if pd.notna(row.get('admin_exp')): info_parts.append(f"管理费用: {format_money(row['admin_exp'])}")
+            if pd.notna(row.get('rd_exp')): info_parts.append(f"研发费用: {format_money(row['rd_exp'])}")
+            if pd.notna(row.get('fin_exp')): info_parts.append(f"财务费用: {format_money(row['fin_exp'])}")
+            if pd.notna(row.get('operate_profit')): info_parts.append(f"营业利润: {format_money(row['operate_profit'])}")
+            if pd.notna(row.get('total_profit')): info_parts.append(f"利润总额: {format_money(row['total_profit'])}")
+            if pd.notna(row.get('income_tax')): info_parts.append(f"所得税: {format_money(row['income_tax'])}")
             if pd.notna(row.get('n_income')): info_parts.append(f"净利: {format_money(row['n_income'])}")
             if pd.notna(row.get('n_income_attr_p')): info_parts.append(f"归母净利: {format_money(row['n_income_attr_p'])}")
 

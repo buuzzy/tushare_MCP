@@ -91,8 +91,13 @@ def register_cashflow_tools(mcp):
             # Add some key financial metrics for quick view
             if pd.notna(row.get('net_profit')): info_parts.append(f"净利润: {format_money(row['net_profit'])}")
             if pd.notna(row.get('n_cashflow_act')): info_parts.append(f"经营净现金流: {format_money(row['n_cashflow_act'])}")
+            if pd.notna(row.get('c_fr_sale_sg')): info_parts.append(f"销售收现: {format_money(row['c_fr_sale_sg'])}")
+            if pd.notna(row.get('c_paid_goods_s')): info_parts.append(f"购买付现: {format_money(row['c_paid_goods_s'])}")
+            if pd.notna(row.get('c_paid_to_for_empl')): info_parts.append(f"支付职工: {format_money(row['c_paid_to_for_empl'])}")
+            if pd.notna(row.get('c_paid_for_taxes')): info_parts.append(f"支付税费: {format_money(row['c_paid_for_taxes'])}")
             if pd.notna(row.get('n_cashflow_inv_act')): info_parts.append(f"投资净现金流: {format_money(row['n_cashflow_inv_act'])}")
             if pd.notna(row.get('n_cash_flows_fnc_act')): info_parts.append(f"筹资净现金流: {format_money(row['n_cash_flows_fnc_act'])}")
+            if pd.notna(row.get('free_cashflow')): info_parts.append(f"自由现金流: {format_money(row['free_cashflow'])}")
             if pd.notna(row.get('n_incr_cash_cash_equ')): info_parts.append(f"现金净增: {format_money(row['n_incr_cash_cash_equ'])}")
 
             result.append(" | ".join(info_parts))
