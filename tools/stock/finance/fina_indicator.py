@@ -36,7 +36,7 @@ def register_fina_indicator_tools(mcp):
         }
         api_params = {k: v for k, v in params.items() if v}
 
-        fields = 'ts_code,ann_date,end_date,eps,dt_eps,revenue_ps,bps,roe,netprofit_margin,grossprofit_margin,debt_to_assets,current_ratio,quick_ratio,q_profit_yoy,q_sales_yoy,ocfps,extra_item,profit_dedt'
+        fields = 'ts_code,ann_date,end_date,eps,dt_eps,revenue_ps,bps,roe,netprofit_margin,grossprofit_margin,debt_to_assets,currentratio,quickratio,q_profit_yoy,q_sales_yoy,ocfps,extra_item,profit_dedt'
 
         df = pro.fina_indicator(**api_params, fields=fields)
         if df.empty:
@@ -70,8 +70,8 @@ def register_fina_indicator_tools(mcp):
 
             other = []
             if pd.notna(row.get('debt_to_assets')): other.append(f"资产负债率:{fmt(row['debt_to_assets'])}")
-            if pd.notna(row.get('current_ratio')): other.append(f"流动比率:{row['current_ratio']:.2f}")
-            if pd.notna(row.get('quick_ratio')): other.append(f"速动比率:{row['quick_ratio']:.2f}")
+            if pd.notna(row.get('currentratio')): other.append(f"流动比率:{row['currentratio']:.2f}")
+            if pd.notna(row.get('quickratio')): other.append(f"速动比率:{row['quickratio']:.2f}")
             if pd.notna(row.get('q_sales_yoy')): other.append(f"营收同比(单季):{fmt(row['q_sales_yoy'])}")
             if pd.notna(row.get('q_profit_yoy')): other.append(f"净利同比(单季):{fmt(row['q_profit_yoy'])}")
             if other: info_parts.append(" | ".join(other))
