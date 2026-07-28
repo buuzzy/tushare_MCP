@@ -28,6 +28,10 @@ def register_income_tools(mcp):
 
         # Default to 8 periods (2 years) when no limit
         effective_limit = limit if limit else 8
+        if period and limit:
+            return ("参数冲突：period（精确匹配单期）和 limit（多期趋势）不应同时使用。"
+                    f"趋势分析请省略 period，例如：income(ts_code=..., limit=12)；"
+                    f"查单期请省略 limit，例如：income(ts_code=..., period=\"20251231\")")
         params = {
             'ts_code': ts_code,
             'ann_date': ann_date,
