@@ -192,8 +192,8 @@ python server.py --stdio
 | `get_stock_company` | 获取上市公司基本信息（注册资本、法人、简介） |
 | `get_namechange` | 历史名称变更记录 |
 | `get_stk_managers` | 上市公司管理层主要成员 |
-| `get_daily` | A 股日线行情（开高低收、成交量）|
-| `get_weekly` / `get_monthly` | 周线 / 月线行情 |
+| `daily` | A 股股票/指数日线行情（开高低收、成交量），支持逗号分隔多代码 |
+| `weekly` / `monthly` | 股票/指数周线 / 月线行情，支持逗号分隔多代码 |
 | `get_daily_basic` | 每日指标（换手率、量比、PE、PB、总市值） |
 | `get_suspend_d` | 每日停复牌信息 |
 | `get_hsgt_top10` | 沪深股通十大成交股 |
