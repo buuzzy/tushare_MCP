@@ -1,7 +1,7 @@
 import pandas as pd
-from datetime import datetime, timedelta
 from utils.logger import log_debug, handle_exception
 from utils.token_manager import get_pro_client
+from .trade_date_utils import resolve_trade_date
 
 def register_hsgt_top10_tools(mcp):
     @mcp.tool()
@@ -12,25 +12,22 @@ def register_hsgt_top10_tools(mcp):
         
         参数:
             ts_code: 股票代码 (e.g., '600519.SH', 可选)
-            trade_date: 交易日期 (YYYYMMDD, 可选, 若不指定且无ts_code则自动获取最近交易日)
-            start_date: 开始日期 (YYYYMMDD, 可选)
-            end_date: 结束日期 (YYYYMMDD, 可选)
+            trade_date: 单个交易日期 (YYYYMMDD, 可选)
+            start_date: 区间开始日期 (YYYYMMDD)。仅与 end_date 同时传入时按区间查询
+            end_date: 区间结束日期 (YYYYMMDD)。单独传入时归一化为当日或之前最近交易日
             market_type: 市场类型（1：沪市 3：深市, 可选）
         """
         log_debug(f"Tool hsgt_top10 called with ts_code='{ts_code}', trade_date='{trade_date}', start_date='{start_date}', end_date='{end_date}', market_type='{market_type}'...")
         pro = get_pro_client()
         
-        # Smart date logic: if no date args provided and no specific stock code, default to latest trade date
-        if not trade_date and not start_date and not end_date and not ts_code:
-            try:
-                today = datetime.now().strftime('%Y%m%d')
-                start_check = (datetime.now() - timedelta(days=20)).strftime('%Y%m%d')
-                df_cal = pro.trade_cal(start_date=start_check, end_date=today, is_open='1')
-                if not df_cal.empty:
-                    trade_date = df_cal['cal_date'].iloc[-1]
-                    log_debug(f"No params provided. Automatically determined latest trading date: {trade_date}")
-            except Exception as e:
-                log_debug(f"Failed to auto-determine latest trade date: {e}")
+        # Keep true range semantics only when both boundaries are explicit.
+        if not trade_date and not (start_date and end_date):
+            resolved_date = resolve_trade_date(pro, start_date, end_date)
+            if resolved_date:
+                trade_date = resolved_date
+                start_date = ""
+                end_date = ""
+                log_debug(f"Normalized hsgt_top10 query to trading date: {trade_date}")
 
         params = {
             'ts_code': ts_code,

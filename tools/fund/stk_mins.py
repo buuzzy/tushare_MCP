@@ -5,27 +5,33 @@ from utils.token_manager import get_pro_client
 def register_stk_mins_tools(mcp):
     @mcp.tool()
     @handle_exception
-    def stk_mins(ts_code: str, freq: str = "1min", start_date: str = "", end_date: str = "", limit: int = None, offset: int = None) -> str:
+    def stk_mins(ts_code: str, freq: str = "5min", start_date: str = "",
+                 end_date: str = "", trade_time: str = "") -> str:
         """
-        获取ETF分钟数据，支持1min/5min/15min/30min/60min行情。
+        获取股票历史分钟数据，支持5min/15min/30min/60min行情。
         
         参数:
-            ts_code: ETF代码，e.g. 159001.SZ (必填)
-            freq: 分钟频度（1min/5min/15min/30min/60min），默认1min
+            ts_code: 股票代码，e.g. 600519.SH (必填)
+            freq: 分钟频度（5min/15min/30min/60min），默认5min。当前MCP未开放1分钟历史权限
             start_date: 开始日期 格式：2025-06-01 09:00:00
             end_date: 结束时间 格式：2025-06-20 19:00:00
-            limit: 单次返回数据长度（最大8000行）
-            offset: 请求数据的开始位移量
+            trade_time: 单个交易日（YYYYMMDD）。传入时返回该日全量分钟数据
         """
         log_debug(f"Tool stk_mins called with ts_code='{ts_code}', freq='{freq}'...")
+        allowed_freqs = {"5min", "15min", "30min", "60min"}
+        if freq not in allowed_freqs:
+            raise ValueError(
+                f"参数错误：stk_mins 仅支持 {', '.join(sorted(allowed_freqs))}；"
+                "1分钟历史数据当前未在此MCP开放"
+            )
+
         pro = get_pro_client()
         params = {
             'ts_code': ts_code,
             'freq': freq,
             'start_date': start_date,
             'end_date': end_date,
-            'limit': limit,
-            'offset': offset
+            'trade_time': trade_time,
         }
         api_params = {k: v for k, v in params.items() if v}
         

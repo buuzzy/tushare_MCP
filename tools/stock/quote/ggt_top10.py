@@ -1,7 +1,7 @@
 import pandas as pd
-from datetime import datetime, timedelta
 from utils.logger import log_debug, handle_exception
 from utils.token_manager import get_pro_client
+from .trade_date_utils import resolve_trade_date
 
 def register_ggt_top10_tools(mcp):
     @mcp.tool()
@@ -12,31 +12,25 @@ def register_ggt_top10_tools(mcp):
         
         参数:
             ts_code: 股票代码 (e.g., '00700', 可选)
-            trade_date: 交易日期 (YYYYMMDD, 可选, 若不指定且无ts_code则自动获取最近交易日)
-            start_date: 开始日期 (YYYYMMDD, 可选)
-            end_date: 结束日期 (YYYYMMDD, 可选)
+            trade_date: 单个交易日期 (YYYYMMDD, 可选)
+            start_date: 兼容输入 (YYYYMMDD, 可选)。上游只支持 trade_date，会转换为该日期当日或之后最近交易日
+            end_date: 兼容输入 (YYYYMMDD, 可选)。上游只支持 trade_date，会转换为该日期当日或之前最近交易日
             market_type: 市场类型 2：港股通（沪） 4：港股通（深） (可选)
         """
         log_debug(f"Tool ggt_top10 called with ts_code='{ts_code}', trade_date='{trade_date}', start_date='{start_date}', end_date='{end_date}', market_type='{market_type}'...")
         pro = get_pro_client()
         
-        # Smart date logic: if no date args provided and no specific stock code, default to latest trade date
-        if not trade_date and not start_date and not end_date and not ts_code:
-            try:
-                today = datetime.now().strftime('%Y%m%d')
-                start_check = (datetime.now() - timedelta(days=20)).strftime('%Y%m%d')
-                df_cal = pro.trade_cal(start_date=start_check, end_date=today, is_open='1')
-                if not df_cal.empty:
-                    trade_date = df_cal['cal_date'].iloc[-1]
-                    log_debug(f"No params provided. Automatically determined latest trading date: {trade_date}")
-            except Exception as e:
-                log_debug(f"Failed to auto-determine latest trade date: {e}")
+        # This TinyShare endpoint only accepts trade_date. Convert common
+        # range-style arguments instead of forwarding unsupported parameters.
+        if not trade_date:
+            resolved_date = resolve_trade_date(pro, start_date, end_date)
+            if resolved_date:
+                trade_date = resolved_date
+                log_debug(f"Normalized ggt_top10 query to trading date: {trade_date}")
 
         params = {
             'ts_code': ts_code,
             'trade_date': trade_date,
-            'start_date': start_date,
-            'end_date': end_date,
             'market_type': market_type
         }
         # Filter out empty params

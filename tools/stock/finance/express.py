@@ -5,7 +5,7 @@ from utils.token_manager import get_pro_client
 def register_express_tools(mcp):
     @mcp.tool()
     @handle_exception
-    def express(ts_code: str = "", ann_date: str = "", start_date: str = "", 
+    def express(ts_code: str, ann_date: str = "", start_date: str = "",
                end_date: str = "", period: str = "", limit: int = None, offset: int = None) -> str:
         """
         获取上市公司业绩快报数据。

@@ -1,57 +1,7 @@
 import pandas as pd
-from datetime import datetime, timedelta
 from utils.logger import log_debug, handle_exception
 from utils.token_manager import get_pro_client
-
-
-def _resolve_trade_date(pro, start_date: str, end_date: str) -> str:
-    if end_date:
-        anchor = datetime.strptime(end_date, '%Y%m%d')
-        start_check = (anchor - timedelta(days=20)).strftime('%Y%m%d')
-        end_check = end_date
-        prefer_previous = True
-    elif start_date:
-        anchor = datetime.strptime(start_date, '%Y%m%d')
-        start_check = start_date
-        end_check = (anchor + timedelta(days=20)).strftime('%Y%m%d')
-        prefer_previous = False
-    else:
-        anchor = datetime.now()
-        start_check = (anchor - timedelta(days=20)).strftime('%Y%m%d')
-        end_check = anchor.strftime('%Y%m%d')
-        prefer_previous = True
-
-    # TinyShare's trade_cal can lag behind its quote data. The Shanghai
-    # Composite index is a reliable A-share trading-day reference here.
-    dates = []
-    try:
-        df_index = pro.index_daily(
-            ts_code='000001.SH',
-            start_date=start_check,
-            end_date=end_check,
-        )
-        if df_index is not None and not df_index.empty:
-            dates = df_index['trade_date'].dropna().tolist()
-    except Exception as e:
-        log_debug(f"Failed to resolve trade date from index_daily: {e}")
-
-    if not dates:
-        df_cal = pro.trade_cal(
-            start_date=start_check,
-            end_date=end_check,
-            is_open='1',
-        )
-        if df_cal is not None and not df_cal.empty:
-            dates = df_cal['cal_date'].dropna().tolist()
-
-    if not dates:
-        return ''
-
-    if prefer_previous:
-        eligible = [date for date in dates if date <= end_check]
-        return max(eligible) if eligible else ''
-    eligible = [date for date in dates if date >= start_check]
-    return min(eligible) if eligible else ''
+from .trade_date_utils import resolve_trade_date
 
 
 def register_top_list_tools(mcp):
@@ -73,12 +23,9 @@ def register_top_list_tools(mcp):
         # The upstream API only accepts trade_date. Normalize range-style agent
         # input to the nearest trading day before we call it.
         if not trade_date:
-            try:
-                trade_date = _resolve_trade_date(pro, start_date, end_date)
-                if trade_date:
-                    log_debug(f"Auto-determined latest trade date: {trade_date}")
-            except Exception as e:
-                log_debug(f"Failed to auto-determine latest trade date: {e}")
+            trade_date = resolve_trade_date(pro, start_date, end_date)
+            if trade_date:
+                log_debug(f"Auto-determined latest trade date: {trade_date}")
 
         params = {
             'trade_date': trade_date,

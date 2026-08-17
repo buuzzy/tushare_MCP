@@ -5,7 +5,7 @@ from utils.token_manager import get_pro_client
 def register_forecast_tools(mcp):
     @mcp.tool()
     @handle_exception
-    def forecast(ts_code: str = "", ann_date: str = "", start_date: str = "", 
+    def forecast(ts_code: str, ann_date: str = "", start_date: str = "",
                end_date: str = "", period: str = "", type: str = "", 
                limit: int = None, offset: int = None) -> str:
         """

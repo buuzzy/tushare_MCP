@@ -32,6 +32,7 @@ def handle_exception(func):
         except Exception as e:
             logger.error(f"Error in {func.__name__}: {str(e)}")
             traceback.print_exc(file=sys.stderr)
+            last_error = e
             # Retry once for transient errors
             if _is_transient(e):
                 logger.warning(f"Transient error in {func.__name__}, retrying once...")
@@ -41,14 +42,10 @@ def handle_exception(func):
                     return func(*args, **kwargs)
                 except Exception as e2:
                     logger.error(f"Retry also failed in {func.__name__}: {str(e2)}")
-                    e = e2
-            # Return appropriate error message based on function name
-            if func.__name__.startswith('get_') or func.__name__.startswith('search_'):
-                return f"查询失败：{str(e)}"
-            elif func.__name__.startswith('setup_') or func.__name__.startswith('set_'):
-                return f"设置失败：{str(e)}"
-            else:
-                return f"操作失败：{str(e)}"
+                    last_error = e2
+            # Let FastMCP convert the exception into a tool result with
+            # isError=true. Returning a string here would hide upstream failures.
+            raise last_error
     return wrapper
 
 # Errors that are likely transient and worth retrying

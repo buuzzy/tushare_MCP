@@ -1,7 +1,7 @@
 import pandas as pd
-from datetime import datetime, timedelta
 from utils.logger import log_debug, handle_exception
 from utils.token_manager import get_pro_client
+from .trade_date_utils import resolve_trade_date
 
 def register_suspend_d_tools(mcp):
     @mcp.tool()
@@ -12,27 +12,24 @@ def register_suspend_d_tools(mcp):
         
         参数:
             ts_code: 股票代码 (e.g., '000001.SZ', 可选)
-            trade_date: 交易日期 (YYYYMMDD, 可选, 若不指定则自动获取最近一个交易日)
-            start_date: 开始日期 (YYYYMMDD, 可选)
-            end_date: 结束日期 (YYYYMMDD, 可选)
+            trade_date: 单个交易日期 (YYYYMMDD, 可选)
+            start_date: 区间开始日期 (YYYYMMDD)。仅与 end_date 同时传入时按区间查询
+            end_date: 区间结束日期 (YYYYMMDD)。单独传入时归一化为当日或之前最近交易日
             suspend_type: 停复牌类型：S-停牌, R-复牌 (可选)
         """
         log_debug(f"Tool suspend_d called with ts_code='{ts_code}', trade_date='{trade_date}', start_date='{start_date}', end_date='{end_date}', suspend_type='{suspend_type}'...")
         pro = get_pro_client()
         
-        # If no dates are provided, default to the latest trading day
-        if not trade_date and not start_date and not end_date:
-            try:
-                today = datetime.now().strftime('%Y%m%d')
-                start_check = (datetime.now() - timedelta(days=20)).strftime('%Y%m%d')
-                # Fetch recent trading calendar to find the latest open day
-                df_cal = pro.trade_cal(start_date=start_check, end_date=today, is_open='1')
-                if not df_cal.empty:
-                    latest_trade_date = df_cal['cal_date'].iloc[-1]
-                    trade_date = latest_trade_date
-                    log_debug(f"No date provided. Automatically determined latest trading date: {trade_date}")
-            except Exception as e:
-                log_debug(f"Failed to auto-determine latest trade date: {e}")
+        # Keep true range semantics only when both boundaries are explicit.
+        # A lone end_date is normalized to one trading day for agent requests
+        # that mean "latest as of this date".
+        if not trade_date and not (start_date and end_date):
+            resolved_date = resolve_trade_date(pro, start_date, end_date)
+            if resolved_date:
+                trade_date = resolved_date
+                start_date = ""
+                end_date = ""
+                log_debug(f"Normalized suspend_d query to trading date: {trade_date}")
 
         params = {
             'ts_code': ts_code,

@@ -5,7 +5,7 @@ from utils.token_manager import get_pro_client
 def register_cashflow_tools(mcp):
     @mcp.tool()
     @handle_exception
-    def cashflow(ts_code: str = "", ann_date: str = "", f_ann_date: str = "", start_date: str = "", 
+    def cashflow(ts_code: str, ann_date: str = "", f_ann_date: str = "", start_date: str = "",
                end_date: str = "", period: str = "", report_type: str = "", comp_type: str = "", 
                is_calc: int = None, limit: int = None, offset: int = None) -> str:
         """

@@ -5,7 +5,7 @@ from utils.token_manager import get_pro_client
 def register_dividend_tools(mcp):
     @mcp.tool()
     @handle_exception
-    def dividend(ts_code: str = "", ann_date: str = "", record_date: str = "", 
+    def dividend(ts_code: str, ann_date: str = "", record_date: str = "",
                ex_date: str = "", imp_ann_date: str = "", 
                limit: int = None, offset: int = None) -> str:
         """

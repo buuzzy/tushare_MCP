@@ -5,16 +5,28 @@ from utils.token_manager import get_corpus_client
 def register_npr_tools(mcp):
     @mcp.tool()
     @handle_exception
-    def npr(limit: int = 30) -> str:
+    def npr(org: str = '', start_date: str = '', end_date: str = '',
+            ptype: str = '', limit: int = 30) -> str:
         """
         获取政策法规数据（国家各部委发布的政策文件）。
 
         参数:
+            org: 发布机构（可选）
+            start_date: 开始日期（可选）
+            end_date: 结束日期（可选）
+            ptype: 政策类型（可选）
             limit: 返回条数上限，默认30
         """
         log_debug(f"Tool npr called: limit={limit}")
         pro = get_corpus_client()
-        df = pro.npr(limit=limit)
+        api_params = {key: value for key, value in {
+            'org': org,
+            'start_date': start_date,
+            'end_date': end_date,
+            'ptype': ptype,
+            'limit': limit,
+        }.items() if value}
+        df = pro.npr(**api_params)
         df_type = type(df).__name__
         df_empty = getattr(df, "empty", "N/A")
         df_shape = getattr(df, "shape", "N/A")

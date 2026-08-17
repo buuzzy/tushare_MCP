@@ -7,7 +7,7 @@ def register_research_report_tools(mcp):
     @handle_exception
     def research_report(ts_code: str = '', trade_date: str = '', start_date: str = '', end_date: str = '',
                         report_type: str = '', inst_csname: str = '', ind_name: str = '',
-                        limit: int = 20) -> str:
+                        limit: int = 20, fields: str = '') -> str:
         """
         获取券商研究报告（个股研报、行业研报、宏观研究等）。数据自2021年起覆盖，每日增量更新。
 
@@ -20,6 +20,7 @@ def register_research_report_tools(mcp):
             inst_csname: 券商简称（可选）
             ind_name: 行业名称（可选）
             limit: 返回条数上限，默认20
+            fields: 上游返回字段（可选）。默认不返回 abstr；需要摘要时指定 fields，例如 "trade_date,title,abstr"
         """
         log_debug(f"Tool research_report called: ts_code={ts_code}, trade_date={trade_date}")
         if not any([ts_code, trade_date, start_date, end_date, report_type, inst_csname, ind_name]):
@@ -30,6 +31,7 @@ def register_research_report_tools(mcp):
             'start_date': start_date, 'end_date': end_date,
             'report_type': report_type, 'inst_csname': inst_csname,
             'ind_name': ind_name, 'limit': limit,
+            'fields': fields,
         }.items() if v}
         pro = get_corpus_client()
         df = pro.research_report(**params)
@@ -51,6 +53,7 @@ def register_research_report_tools(mcp):
             if pd.notna(row.get('inst_csname')): parts.append(f"机构:{row['inst_csname']}")
             if pd.notna(row.get('name')): parts.append(f"个股:{row['name']}")
             if pd.notna(row.get('ind_name')): parts.append(f"行业:{row['ind_name']}")
+            if pd.notna(row.get('abstr')): parts.append(f"摘要:{row['abstr']}")
             result.append(" | ".join(parts))
 
         if len(df) > display_cap:

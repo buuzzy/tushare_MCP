@@ -5,7 +5,7 @@ from utils.token_manager import get_pro_client
 def register_income_tools(mcp):
     @mcp.tool()
     @handle_exception
-    def income(ts_code: str = "", ann_date: str = "", f_ann_date: str = "", start_date: str = "", 
+    def income(ts_code: str, ann_date: str = "", f_ann_date: str = "", start_date: str = "",
                end_date: str = "", period: str = "", report_type: str = "", comp_type: str = "", 
                limit: int = None, offset: int = None) -> str:
         """

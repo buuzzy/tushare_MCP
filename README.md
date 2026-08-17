@@ -226,7 +226,7 @@ python server.py --stdio
 | `fund_div` | 公募基金分红记录 |
 | `fund_portfolio` | 公募基金持仓数据（十大重仓股） |
 | `fund_factor_pro` | 场内基金技术面因子数据（MACD/RSI等） |
-| `stk_mins` | ETF/股票分钟级别行情 |
+| `stk_mins` | 股票历史分钟行情（5/15/30/60分钟；1分钟未开放） |
 
 > 完整工具列表请查阅 `tools/` 目录或启动服务后访问 API 文档。
 

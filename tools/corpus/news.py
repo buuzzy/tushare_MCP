@@ -5,7 +5,7 @@ from utils.token_manager import get_corpus_client
 def register_news_tools(mcp):
     @mcp.tool()
     @handle_exception
-    def news(start_date: str = '', end_date: str = '', src: str = '', limit: int = 500, offset: int = 0) -> str:
+    def news(start_date: str, end_date: str, src: str = '', limit: int = 500, offset: int = 0) -> str:
         """
         获取财经新闻快讯数据。支持按来源和时间范围筛选。
 
@@ -17,9 +17,6 @@ def register_news_tools(mcp):
             offset: 跳过前 offset 条，用于分页
         """
         log_debug(f"Tool news called: start={start_date}, end={end_date}, src={src}")
-        if not start_date or not end_date:
-            return "错误：必须提供 start_date 和 end_date 参数（格式：YYYY-MM-DD HH:mm:ss）"
-
         pro = get_corpus_client()
         params = {'start_date': start_date, 'end_date': end_date, 'limit': limit, 'offset': offset}
         if src:

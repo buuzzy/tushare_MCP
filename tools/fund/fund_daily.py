@@ -5,7 +5,7 @@ from utils.token_manager import get_pro_client
 def register_fund_daily_tools(mcp):
     @mcp.tool()
     @handle_exception
-    def fund_daily(ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = "", limit: int = None, offset: int = None) -> str:
+    def fund_daily(ts_code: str, trade_date: str = "", start_date: str = "", end_date: str = "", limit: int = None, offset: int = None) -> str:
         """
         获取ETF/基金日线行情收盘数据。
         

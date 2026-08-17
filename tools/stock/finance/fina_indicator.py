@@ -5,7 +5,7 @@ from utils.token_manager import get_pro_client
 def register_fina_indicator_tools(mcp):
     @mcp.tool()
     @handle_exception
-    def fina_indicator(ts_code: str = "", ann_date: str = "", start_date: str = "",
+    def fina_indicator(ts_code: str, ann_date: str = "", start_date: str = "",
                end_date: str = "", period: str = "", limit: int = None, offset: int = None) -> str:
         """
         获取上市公司财务指标数据（含ROE、毛利率、净利率、资产负债率、流动比率、速动比率等）。
