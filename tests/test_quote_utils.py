@@ -186,6 +186,13 @@ class QuoteUtilsTests(unittest.TestCase):
         self.assertEqual(df["ts_code"].tolist(), ["000001.SZ"])
         pro.sw_daily.assert_called_once_with(trade_date="20260814", ts_code="801080.SI")
 
+    def test_format_lists_missing_requested_codes(self):
+        df = pd.DataFrame([{"ts_code": "801080.SI", "trade_date": "20260814"}])
+
+        output = format_quote_data(df, "daily", ["801080.SI", "801020.SI"])
+
+        self.assertIn("未找到代码:801020.SI", output)
+
     def test_display_limit_is_per_code(self):
         dates = [str(20260101 + index) for index in range(60)]
         rows = []

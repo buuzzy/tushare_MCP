@@ -154,6 +154,7 @@ def format_quote_data(df: pd.DataFrame, period: str, requested_codes: Iterable[s
     }
     period_name, value_prefix = labels[period]
     display_df = _select_display_rows(df, requested_codes, per_code_limit=50)
+    requested_code_list = list(requested_codes)
 
     results = [f"--- {period_name}行情数据 (Total: {len(df)}) ---"]
     for _, row in display_df.iterrows():
@@ -183,6 +184,12 @@ def format_quote_data(df: pd.DataFrame, period: str, requested_codes: Iterable[s
         if pd.notna(row.get("amount")):
             info.append(f"{value_prefix}成交额:{row['amount']}千元")
         results.append(" | ".join(info))
+
+    if "ts_code" in df.columns:
+        found_codes = set(df["ts_code"].dropna())
+        missing_codes = [code for code in requested_code_list if code not in found_codes]
+        if missing_codes:
+            results.append("未找到代码:" + ",".join(missing_codes))
 
     if len(display_df) < len(df):
         results.append(f"... (共 {len(df)} 条，每个代码仅显示最近 50 条)")
