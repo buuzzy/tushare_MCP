@@ -16,7 +16,9 @@ def resolve_trade_date(pro, start_date: str = "", end_date: str = "") -> str:
         end_check = (anchor + timedelta(days=20)).strftime("%Y%m%d")
         prefer_previous = False
     else:
-        anchor = datetime.now()
+        # With no user-provided boundary, "latest" should mean the latest
+        # completed trading day rather than a possibly unpublished same-day bar.
+        anchor = datetime.now() - timedelta(days=1)
         start_check = (anchor - timedelta(days=20)).strftime("%Y%m%d")
         end_check = anchor.strftime("%Y%m%d")
         prefer_previous = True

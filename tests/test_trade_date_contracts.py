@@ -1,5 +1,6 @@
 import unittest
 from unittest import mock
+from datetime import datetime
 
 import pandas as pd
 
@@ -9,6 +10,8 @@ from tools.stock.quote import (
     hsgt_top10 as hsgt_top10_module,
     suspend_d as suspend_d_module,
 )
+from tools.stock.quote import trade_date_utils
+from tools.stock.quote.trade_date_utils import resolve_trade_date
 
 
 class ToolCapture:
@@ -35,6 +38,24 @@ class TradeDateContractTests(unittest.TestCase):
         pro.index_daily.return_value = pd.DataFrame({"trade_date": ["20260814"]})
         pro.trade_cal.return_value = pd.DataFrame({"cal_date": ["20260728"]})
         return pro
+
+    def test_default_latest_uses_previous_completed_day(self):
+        pro = mock.Mock()
+        pro.index_daily.side_effect = lambda **params: pd.DataFrame(
+            {"trade_date": [params["end_date"]]}
+        )
+
+        class FixedDateTime(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return cls(2026, 8, 17, 12)
+
+        with mock.patch.object(trade_date_utils, "datetime", FixedDateTime):
+            result = resolve_trade_date(pro)
+
+        params = pro.index_daily.call_args.kwargs
+        self.assertEqual(params["end_date"], "20260816")
+        self.assertEqual(result, "20260816")
 
     def test_suspend_d_auto_prefers_fresh_index_data(self):
         pro = self.fresh_calendar_client()
