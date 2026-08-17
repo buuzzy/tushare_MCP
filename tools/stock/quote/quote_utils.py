@@ -19,13 +19,19 @@ def is_index_code(ts_code: str) -> bool:
         return symbol.startswith("000")
     if exchange == "SZ":
         return symbol.startswith("399")
-    return exchange == "CSI"
+    return exchange == "CSI" or is_sw_index_code(ts_code)
+
+
+def is_sw_index_code(ts_code: str) -> bool:
+    symbol, _, exchange = ts_code.partition(".")
+    return exchange == "SI" and symbol.startswith("801")
 
 
 def fetch_quote_data(
     pro,
     stock_api: str,
     index_api: str,
+    period: str,
     ts_code: str,
     **api_params,
 ) -> pd.DataFrame:
@@ -35,15 +41,75 @@ def fetch_quote_data(
         return getattr(pro, stock_api)(**api_params)
 
     frames: list[pd.DataFrame] = []
+    sw_codes: list[str] = []
     for code in codes:
-        api_name = index_api if is_index_code(code) else stock_api
-        frame = getattr(pro, api_name)(**api_params, ts_code=code)
-        if frame is not None and not frame.empty:
+        if is_sw_index_code(code):
+            sw_codes.append(code)
+        else:
+            api_name = index_api if is_index_code(code) else stock_api
+            frame = getattr(pro, api_name)(**api_params, ts_code=code)
+            if frame is not None and not frame.empty:
+                frames.append(frame)
+
+    if sw_codes:
+        frame = _fetch_sw_quote_data(
+            pro,
+            period=period,
+            codes=sw_codes,
+            **api_params,
+        )
+        if not frame.empty:
             frames.append(frame)
 
     if not frames:
         return pd.DataFrame()
     return pd.concat(frames, ignore_index=True)
+
+
+def _fetch_sw_quote_data(
+    pro,
+    period: str,
+    codes: list[str],
+    **api_params,
+) -> pd.DataFrame:
+    """Fetch Shenwan daily bars and aggregate them for weekly/monthly tools."""
+    frames: list[pd.DataFrame] = []
+    for code in codes:
+        frame = pro.sw_daily(**api_params, ts_code=code)
+        if frame is not None and not frame.empty:
+            frames.append(frame)
+
+    if not frames:
+        return pd.DataFrame()
+
+    daily = pd.concat(frames, ignore_index=True)
+    daily = daily.sort_values(["ts_code", "trade_date"]).reset_index(drop=True)
+    daily = daily.rename(columns={"pct_change": "pct_chg"})
+    if period == "daily":
+        return daily
+
+    daily["trade_date_dt"] = pd.to_datetime(daily["trade_date"], format="%Y%m%d")
+    frequency = "W-SUN" if period == "weekly" else "M"
+    daily["__period"] = daily["trade_date_dt"].dt.to_period(frequency).astype(str)
+    grouped = (
+        daily.groupby(["ts_code", "__period"], sort=False)
+        .agg(
+            trade_date=("trade_date", "max"),
+            name=("name", "first"),
+            open=("open", "first"),
+            high=("high", "max"),
+            low=("low", "min"),
+            close=("close", "last"),
+            vol=("vol", "sum"),
+            amount=("amount", "sum"),
+        )
+        .reset_index()
+    )
+    grouped = grouped.sort_values(["ts_code", "trade_date"])
+    grouped["pre_close"] = grouped.groupby("ts_code")["close"].shift(1)
+    grouped["change"] = grouped["close"] - grouped["pre_close"]
+    grouped["pct_chg"] = grouped["change"] / grouped["pre_close"] * 100
+    return grouped.drop(columns=["__period"])
 
 
 def _select_display_rows(df: pd.DataFrame, requested_codes: Iterable[str], per_code_limit: int) -> pd.DataFrame:
@@ -96,6 +162,8 @@ def format_quote_data(df: pd.DataFrame, period: str, requested_codes: Iterable[s
             info.append(f"日期:{row['trade_date']}")
         if pd.notna(row.get("ts_code")):
             info.append(f"代码:{row['ts_code']}")
+        if pd.notna(row.get("name")):
+            info.append(f"名称:{row['name']}")
         pre_close_label = {"daily": "昨收", "weekly": "上周收盘", "monthly": "上月收盘"}[period]
         for field, label in (
             ("open", "开盘"),

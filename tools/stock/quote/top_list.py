@@ -11,22 +11,38 @@ def register_top_list_tools(mcp):
         龙虎榜每日明细 (top_list)。
 
         参数:
-            trade_date: 交易日期 (YYYYMMDD, 若不指定且无其他参数则自动取最近交易日)
+            trade_date: 交易日期 (YYYYMMDD)
             ts_code: 股票代码 (e.g., '600519.SH', 可选)
-            start_date: 开始日期 (YYYYMMDD, 可选)
-            end_date: 结束日期 (YYYYMMDD, 可选)
+            start_date: 兼容区间输入；会取该日期当日或之后最近交易日
+            end_date: 兼容区间输入；会取该日期当日或之前最近交易日
         """
         log_debug(f"Tool top_list called with trade_date='{trade_date}', ts_code='{ts_code}', start_date='{start_date}', end_date='{end_date}'")
         pro = get_pro_client()
 
-        # Smart date: if no date args and no ts_code, default to latest trade date
-        if not trade_date and not start_date and not end_date and not ts_code:
+        # The upstream API only accepts trade_date. Normalize range-style agent
+        # input to the nearest trading day before we call it.
+        if not trade_date:
             try:
-                today = datetime.now().strftime('%Y%m%d')
-                start_check = (datetime.now() - timedelta(days=10)).strftime('%Y%m%d')
-                df_cal = pro.trade_cal(start_date=start_check, end_date=today, is_open='1')
+                if end_date:
+                    anchor = datetime.strptime(end_date, '%Y%m%d')
+                    start_check = (anchor - timedelta(days=20)).strftime('%Y%m%d')
+                    end_check = end_date
+                elif start_date:
+                    anchor = datetime.strptime(start_date, '%Y%m%d')
+                    start_check = start_date
+                    end_check = (anchor + timedelta(days=20)).strftime('%Y%m%d')
+                else:
+                    anchor = datetime.now()
+                    start_check = (anchor - timedelta(days=20)).strftime('%Y%m%d')
+                    end_check = anchor.strftime('%Y%m%d')
+
+                df_cal = pro.trade_cal(start_date=start_check, end_date=end_check, is_open='1')
                 if not df_cal.empty:
-                    trade_date = df_cal['cal_date'].iloc[-1]
+                    cal_dates = df_cal['cal_date'].tolist()
+                    if end_date or not start_date:
+                        trade_date = cal_dates[-1]
+                    else:
+                        trade_date = cal_dates[0]
                     log_debug(f"Auto-determined latest trade date: {trade_date}")
             except Exception as e:
                 log_debug(f"Failed to auto-determine latest trade date: {e}")
@@ -34,8 +50,6 @@ def register_top_list_tools(mcp):
         params = {
             'trade_date': trade_date,
             'ts_code': ts_code,
-            'start_date': start_date,
-            'end_date': end_date,
         }
         api_params = {k: v for k, v in params.items() if v}
 

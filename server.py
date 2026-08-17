@@ -91,9 +91,6 @@ TOOL_ALIASES = {
     "basic_info": "stock_basic",
     "fund_data": "fund_daily",
     "fund_info": "fund_nav",
-    "stk_holder_number": "stk_holdernumber",
-    "holder_number": "stk_holdernumber",
-    "top_holders": "stk_holdernumber",
 }
 
 def register_tool_aliases(mcp: FastMCP):

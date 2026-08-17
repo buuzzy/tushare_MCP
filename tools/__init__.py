@@ -57,7 +57,6 @@ def register_stock_tools(mcp):
     register_ggt_monthly_tools(mcp)
     register_top_list_tools(mcp)
     # register_stock_premarket_tools(mcp)
-    register_finance_tools(mcp)
 
 def register_all_tools(mcp, categories: Optional[List[str]] = None):
     """
