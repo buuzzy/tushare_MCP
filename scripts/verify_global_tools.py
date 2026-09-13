@@ -35,6 +35,7 @@ CASES = [
     # (工具, 参数, 预期子串, 最小bar数)  min_bars>0 时校验 Total 根数，防"只返回1根"回归
     ("search_symbol", {"query": "00700"}, "00700", 0),
     ("search_symbol", {"query": "AAPL", "market": "us"}, "AAPL", 0),
+    ("search_symbol", {"query": "SNDK", "market": "us"}, "SNDK", 0),
     ("hk_fina_indicator", {"symbol": "00700", "limit": 3}, "ROE", 0),
     ("hk_income", {"symbol": "00700", "limit": 2}, "营业", 0),
     ("hk_balancesheet", {"symbol": "700", "limit": 1}, "报告期", 0),

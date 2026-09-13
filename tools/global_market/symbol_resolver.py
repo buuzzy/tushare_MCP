@@ -154,8 +154,36 @@ def resolve_us(raw: str) -> str:
     return f"{prefix}.{ticker}" if prefix else ticker
 
 
+def _verify_us_ticker_via_sina(ticker: str) -> bool:
+    """用新浪源验证美股 ticker 是否存在（拉全历史，非空即有效；3h 缓存）。
+
+    活跃股表只是成交额前若干页的快照，覆盖不稳定（线上实测 SNDK 等
+    热门票也可能缺席），ticker 直查兜底保证"像代码的查询"总能验证。
+    """
+    try:
+        df = em_call(
+            "sina_quote",
+            lambda: _sina_us_daily(symbol=ticker, adjust=""),
+            cache_key=f"us_kl_sina:{ticker}:",
+            ttl_seconds=3 * 3600,
+        )
+        return df is not None and not df.empty
+    except Exception as e:
+        log_debug(f"[symbol_resolver] ticker verify failed for {ticker}: {e}")
+        return False
+
+
+def _sina_us_daily(symbol: str, adjust: str):
+    """惰性导入 akshare，避免 symbol_resolver 顶层依赖。"""
+    import akshare as ak
+    return ak.stock_us_daily(symbol=symbol, adjust=adjust)
+
+
 def search_symbols(query: str, market: str = "all", limit: int = 10) -> list[dict]:
     """按代码前缀或名称包含匹配港股/美股活跃股。
+
+    美股 query 形如 ticker 而列表未命中时，用新浪源直接验证兜底；
+    港股 5 位数字代码同理直接透传（列表仅用于补中文名）。
 
     Returns: [{"market": "HK"/"US", "code": "00700", "name": "腾讯控股"}...]
     """
@@ -177,4 +205,12 @@ def search_symbols(query: str, market: str = "all", limit: int = 10) -> list[dic
         match("HK", _load_hk_list())
     if len(results) < limit and market in ("all", "us"):
         match("US", _load_us_list())
+
+    # ticker / 数字代码直查兜底（活跃表是快照，覆盖不稳定）
+    if not results:
+        if market in ("all", "us") and re.fullmatch(r"[A-Z][A-Z0-9._-]{0,9}", q_upper):
+            if _verify_us_ticker_via_sina(q_upper):
+                results.append({"market": "US", "code": q_upper, "name": q_upper})
+        elif market in ("all", "hk") and re.fullmatch(r"\d{1,5}", query):
+            results.append({"market": "HK", "code": query.zfill(5), "name": query.zfill(5)})
     return results[:limit]
