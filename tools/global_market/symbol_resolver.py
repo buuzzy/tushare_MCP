@@ -58,23 +58,34 @@ def normalize_hk(raw: str) -> Optional[str]:
 
 
 def _fetch_clist_pages(fs: str) -> list[dict]:
-    """拉取 clist 若干页（成交额降序），返回 [{"code","name","market"}...]。"""
+    """拉取 clist 若干页（成交额降序），返回 [{"code","name","market"}...]。
+
+    单页失败重试一次，仍失败则提前结束（部分结果好于全无——列表按成交额
+    降序，前面的页覆盖最活跃的股票）。
+    """
     rows: list[dict] = []
     for page in range(1, _LIST_PAGES + 1):
-        resp = em_call(
-            "eastmoney_list",
-            lambda p=page: requests.get(
-                _CLIST_URL,
-                params={
-                    "pn": p, "pz": _LIST_PAGE_SIZE, "po": 1, "np": 1,
-                    "fltt": 2, "invt": 2, "fid": "f6", "fs": fs,
-                    "fields": "f12,f13,f14",
-                },
-                timeout=15,
-            ).json(),
-            cache_key="",
-        )
-        diff = (resp.get("data") or {}).get("diff") or []
+        diff: list = []
+        for attempt in range(2):
+            try:
+                resp = em_call(
+                    "eastmoney_list",
+                    lambda p=page: requests.get(
+                        _CLIST_URL,
+                        params={
+                            "pn": p, "pz": _LIST_PAGE_SIZE, "po": 1, "np": 1,
+                            "fltt": 2, "invt": 2, "fid": "f6", "fs": fs,
+                            "fields": "f12,f13,f14",
+                        },
+                        timeout=15,
+                    ).json(),
+                    cache_key="",
+                )
+                diff = (resp.get("data") or {}).get("diff") or []
+                break
+            except requests.exceptions.RequestException:
+                if attempt == 1:
+                    return rows  # 已尽力，返回已拉到的部分
         for item in diff:
             rows.append(
                 {"code": str(item.get("f12", "")), "name": str(item.get("f14", "")).strip(),

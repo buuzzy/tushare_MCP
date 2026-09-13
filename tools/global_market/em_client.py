@@ -27,8 +27,8 @@ _GROUP_RATES: dict[str, tuple[float, int]] = {
     "hkex": (1.0, 2),                  # 披露易，保守
 }
 
-_CIRCUIT_FAILS = 2       # 连续连接层失败 N 次后熔断
-_CIRCUIT_COOLDOWN = 600  # 熔断时长（秒）
+_CIRCUIT_FAILS = 3       # 连续连接层失败 N 次后熔断（偶发首连抖动不应触发）
+_CIRCUIT_COOLDOWN = 120  # 熔断时长（秒）：实测东财断连恢复为分钟级，10 分钟过长
 _CACHE_MAX = 500
 
 # 视为"连接层失败"的异常（触发熔断计数）；数据类异常（空结果等）不计

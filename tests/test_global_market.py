@@ -184,14 +184,13 @@ class EMClientTests(unittest.TestCase):
             fails.append(1)
             raise boom
 
-        with self.assertRaises(_requests.exceptions.ConnectionError):
-            client.call("hkex", fn)
-        with self.assertRaises(_requests.exceptions.ConnectionError):
-            client.call("hkex", fn)
-        # 两次连续连接失败后熔断打开
+        for _ in range(3):  # 阈值 3：偶发首连抖动（1-2 次）不应触发熔断
+            with self.assertRaises(_requests.exceptions.ConnectionError):
+                client.call("hkex", fn)
+        # 连续三次连接失败后熔断打开
         with self.assertRaises(RateLimitedError):
             client.call("hkex", fn)
-        self.assertEqual(len(fails), 2)
+        self.assertEqual(len(fails), 3)
 
     def test_data_error_does_not_trip_circuit(self):
         client = _EMClient()
