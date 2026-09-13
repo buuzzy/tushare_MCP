@@ -179,6 +179,34 @@ def _sina_us_daily(symbol: str, adjust: str):
     return ak.stock_us_daily(symbol=symbol, adjust=adjust)
 
 
+def _us_name_from_em(ticker: str) -> Optional[str]:
+    """东财 F10 公司概况查美股中文名（datacenter 组稳定；24h 缓存）。"""
+    def _do() -> Optional[str]:
+        resp = requests.get(
+            "https://datacenter.eastmoney.com/securities/api/data/v1/get",
+            params={
+                "reportName": "RPT_USF10_INFO_ORGPROFILE",
+                "columns": "SECUCODE,SECURITY_CODE,SECURITY_NAME_ABBR,ORG_NAME",
+                "quoteColumns": "", "filter": f'(SECURITY_CODE="{ticker}")',
+                "pageNumber": "1", "pageSize": "2", "source": "SECURITIES", "client": "PC",
+            },
+            timeout=15,
+        ).json()
+        rows = (resp.get("result") or {}).get("data") or []
+        for row in rows:
+            name = str(row.get("SECURITY_NAME_ABBR") or "").strip()
+            if name:
+                return name
+        return None
+
+    try:
+        return em_call("eastmoney_datacenter", _do,
+                       cache_key=f"us_name:{ticker}", ttl_seconds=TTL_DAILY)
+    except Exception as e:
+        log_debug(f"[symbol_resolver] name lookup failed for {ticker}: {e}")
+        return None
+
+
 def search_symbols(query: str, market: str = "all", limit: int = 10) -> list[dict]:
     """按代码前缀或名称包含匹配港股/美股活跃股。
 
@@ -210,7 +238,8 @@ def search_symbols(query: str, market: str = "all", limit: int = 10) -> list[dic
     if not results:
         if market in ("all", "us") and re.fullmatch(r"[A-Z][A-Z0-9._-]{0,9}", q_upper):
             if _verify_us_ticker_via_sina(q_upper):
-                results.append({"market": "US", "code": q_upper, "name": q_upper})
+                results.append({"market": "US", "code": q_upper,
+                                "name": _us_name_from_em(q_upper) or q_upper})
         elif market in ("all", "hk") and re.fullmatch(r"\d{1,5}", query):
             results.append({"market": "HK", "code": query.zfill(5), "name": query.zfill(5)})
     return results[:limit]

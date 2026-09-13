@@ -32,7 +32,13 @@ CASES = {
     4: ("港股比亚迪股份(01211)最近有什么公告？",
         ["hk_announcement"], [], ["比亚迪"]),
     5: ("查询 SNDK 最近10个交易日的行情",
-        ["us_daily"], [], ["闪迪"]),
+        ["us_daily|us_stock_daily"], [], ["闪迪"]),
+    6: ("英伟达这只股票最近的走势怎么样？",
+        ["us_daily|us_stock_daily"], [], ["英伟达"]),
+    7: ("腾讯今年以来营收和利润趋势如何？",
+        ["hk_fina_indicator"], [], []),
+    8: ("特斯拉和苹果今年以来的股价表现对比一下",
+        ["us_daily"], [], []),
 }
 
 
@@ -80,7 +86,8 @@ def run_case(token: str, case_no: int) -> bool:
 
     ok = True
     for expect in expect_tools:
-        hit = any(expect in t for t in tool_seq)
+        candidates = expect.split('|')
+        hit = any(c in t for c in candidates for t in tool_seq)
         print(f"  {'PASS' if hit else 'FAIL'}  期望工具 {expect}: {'命中' if hit else '未命中'}")
         ok = ok and hit
     for forbid in forbid_tools:
