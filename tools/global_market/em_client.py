@@ -20,8 +20,9 @@ from utils.logger import log_debug
 
 # 域名组 -> (每秒令牌数, 桶容量突发)
 _GROUP_RATES: dict[str, tuple[float, int]] = {
-    "eastmoney_quote": (0.3, 3),       # push2his：K线/指数，最敏感（实测会断连）
-    "eastmoney_datacenter": (1.0, 3),  # datacenter：F10 财务
+    "tencent_quote": (1.0, 5),        # ifzq.gtimg.cn：K线/指数（线上实测稳定）
+    "eastmoney_quote": (0.3, 3),      # push2his：备用（东财对海外 IP 动态封禁，勿作主力）
+    "eastmoney_datacenter": (1.0, 3),  # datacenter：F10 财务（海外稳定）
     "eastmoney_list": (1.0, 2),        # push2：代码列表（24h 缓存，量极小）
     "sec_edgar": (8.0, 8),             # SEC EDGAR 官方上限 10 req/s，留余量
     "hkex": (1.0, 2),                  # 披露易，保守

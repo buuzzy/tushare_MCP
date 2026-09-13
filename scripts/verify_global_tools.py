@@ -44,13 +44,13 @@ CASES = [
     ("us_cashflow", {"symbol": "AAPL", "limit": 1}, "报告期"),
     ("us_filings", {"symbol": "AAPL", "form": "10-K", "limit": 3}, "10-K"),
     ("hk_announcements", {"symbol": "00700", "limit": 5}, "公告"),
-    ("hk_daily", {"symbol": "00700", "start_date": "20260901"}, "腾讯"),
-    ("hk_weekly", {"symbol": "00700", "start_date": "20260801"}, "周线"),
-    ("hk_monthly", {"symbol": "00700", "start_date": "20260601"}, "月线"),
-    ("us_daily", {"symbol": "AAPL", "start_date": "20260901"}, "苹果"),
-    ("us_weekly", {"symbol": "AAPL", "start_date": "20260801"}, "周线"),
-    ("global_index_daily", {"symbol": "HSI", "start_date": "20260901"}, "恒生指数"),
-    ("global_index_daily", {"symbol": "SPX", "start_date": "20260901"}, "标普"),
+    ("hk_daily", {"symbol": "00700", "start_date": "20260901"}, "代码:00700.HK"),
+    ("hk_weekly", {"symbol": "00700", "start_date": "20260801"}, "代码:00700.HK"),
+    ("hk_monthly", {"symbol": "00700", "start_date": "20260601"}, "代码:00700.HK"),
+    ("us_daily", {"symbol": "AAPL", "start_date": "20260901"}, "代码:AAPL"),
+    ("us_weekly", {"symbol": "AAPL", "start_date": "20260801"}, "代码:AAPL"),
+    ("global_index_daily", {"symbol": "HSI", "start_date": "20260901"}, "代码:hkHSI"),
+    ("global_index_daily", {"symbol": "SPX", "start_date": "20260901"}, "代码:usINX"),
 ]
 
 

@@ -25,25 +25,27 @@ HK_INDICATOR_FIELDS: list[tuple[str, str]] = [
     ("OCF_SALES", "经营现金流/营收"),
 ]
 
-# 美股主要指标：字段 -> 中文标签
+# 美股主要指标：字段 -> 中文标签（RPT_USF10_FN_GMAININDICATOR 实测列名）
 US_INDICATOR_FIELDS: list[tuple[str, str]] = [
     ("OPERATE_INCOME", "营业收入"),
     ("OPERATE_INCOME_YOY", "营收同比"),
-    ("NET_INCOME", "归母净利"),
-    ("NET_INCOME_YOY", "归母净利同比"),
+    ("PARENT_HOLDER_NETPROFIT", "归母净利"),
+    ("PARENT_HOLDER_NETPROFIT_YOY", "归母净利同比"),
     ("GROSS_PROFIT_RATIO", "毛利率"),
     ("NET_PROFIT_RATIO", "净利率"),
     ("ROE_AVG", "ROE"),
     ("ROA", "ROA"),
     ("DEBT_ASSET_RATIO", "资产负债率"),
     ("CURRENT_RATIO", "流动比率"),
+    ("SPEED_RATIO", "速动比率"),
     ("BASIC_EPS", "EPS"),
-    ("BPS", "BPS"),
+    ("DILUTED_EPS", "稀释EPS"),
 ]
 
 # 百分比类字段（输出时加 %）
 _PCT_FIELDS = {
     "OPERATE_INCOME_YOY", "HOLDER_PROFIT_YOY", "NET_INCOME_YOY",
+    "PARENT_HOLDER_NETPROFIT_YOY", "GROSS_PROFIT_YOY",
     "GROSS_PROFIT_RATIO", "NET_PROFIT_RATIO", "ROE_AVG", "ROA",
     "DEBT_ASSET_RATIO", "OCF_SALES", "涨跌幅", "YOY_RATIO",
 }

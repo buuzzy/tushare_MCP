@@ -87,14 +87,26 @@ class SymbolResolverTests(unittest.TestCase):
         self.assertIsNone(normalize_hk(""))
 
     def test_resolve_index(self):
-        self.assertEqual(resolve_index("HSI"), ("100.HSI", "恒生指数"))
-        self.assertEqual(resolve_index("恒指"), ("100.HSI", "恒生指数"))
-        self.assertEqual(resolve_index("spx"), ("100.SPX", "标普500指数"))
+        self.assertEqual(resolve_index("HSI"), ("hkHSI", "恒生指数"))
+        self.assertEqual(resolve_index("恒指"), ("hkHSI", "恒生指数"))
+        self.assertEqual(resolve_index("spx"), ("usINX", "标普500指数"))
         self.assertIsNone(resolve_index("AAPL"))
 
     def test_index_aliases_unique_secids(self):
         secids = {v[0] for v in INDEX_ALIASES.values()}
         self.assertGreater(len(secids), 5)
+
+
+class TxParamTests(unittest.TestCase):
+    def test_param_shape(self):
+        from tools.global_market.quote import _tx_param
+        # 不复权：fq 段为空但保留尾逗号（腾讯 fqkline 约定；kline/get 端点已废弃）
+        self.assertEqual(_tx_param("hk00700", "daily", "2026-09-01", "2026-09-13", ""),
+                         "hk00700,day,2026-09-01,2026-09-13,800,")
+        # 前复权/后复权
+        self.assertTrue(_tx_param("hk00700", "daily", "a", "b", "qfq").endswith(",qfq"))
+        self.assertTrue(_tx_param("usAAPL", "weekly", "a", "b", "hfq").endswith(",hfq"))
+        self.assertIn("week", _tx_param("usAAPL", "weekly", "a", "b", "qfq"))
 
 
 class FormattingTests(unittest.TestCase):
