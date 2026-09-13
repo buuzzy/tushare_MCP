@@ -140,7 +140,7 @@ def register_announcement_tools(mcp) -> None:
         在不确定代码时先用本工具查询，再调用行情/财务工具。
 
         参数:
-            query: 代码前缀或名称关键字（如 '00700'、'腾讯'、'AAPL'、'苹果'）
+            query: 代码前缀或名称关键字（如 '00700'、'腾讯控股'、'AAPL'、'苹果'）
             market: 'all'（默认）/ 'hk' / 'us'
             limit: 返回条数（默认 10）
         """
@@ -152,7 +152,7 @@ def register_announcement_tools(mcp) -> None:
             rows = search_symbols(query.strip(), market=market, limit=limit)
         except Exception as e:
             log_debug(f"[global] search_symbol failed: {e}")
-            return "代码表暂时不可用（数据源限流），请稍后再试；港股可直接用 5 位数字代码，美股用 ticker"
+            return "股票代码表暂时不可用（服务繁忙），请稍后再试；港股可直接用 5 位数字代码，美股用 ticker"
         if not rows:
             return f"未找到匹配 '{query}' 的股票（活跃股表范围）；港股可直接用 5 位数字代码，美股用 ticker"
         return format_generic_rows(

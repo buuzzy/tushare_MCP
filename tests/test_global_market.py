@@ -77,6 +77,47 @@ class ToolSchemaTests(unittest.TestCase):
             self.assertTrue(tools[name].description, f"{name} missing description")
 
 
+class VendorLeakageTests(unittest.TestCase):
+    """MCP 运行时可见面（工具描述/错误消息）不得暴露商业数据供应商。
+    官方权威机构（SEC/披露易）不在限制内。"""
+
+    BANNED = ("tushare", "akshare", "东财", "东方财富", "腾讯", "tinyshare",
+              "minishare", "sina", "新浪", "eastmoney", "tencent", "gtimg", "ifzq")
+    # 公司名示例（如 '00700'=腾讯控股）是代码格式的说明，不属于供应商泄漏
+    COMPANY_NAME_WHITELIST = ("腾讯控股", "腾讯音乐", "特斯拉")
+
+    def test_tool_descriptions_do_not_leak_vendors(self):
+        tools = _register_global_tools()
+        for name, tool in tools.items():
+            desc = (tool.description or "").lower()
+            for company in self.COMPANY_NAME_WHITELIST:
+                desc = desc.replace(company.lower(), "")
+            for banned in self.BANNED:
+                self.assertNotIn(banned, desc, f"tool '{name}' leaks '{banned}'")
+
+    def test_rate_limited_message_does_not_leak_group_name(self):
+        import requests as _requests
+
+        from tools.global_market import em_client as _em
+
+        client = _EMClient()
+        calls = []
+
+        def fn():
+            calls.append(1)
+            raise _requests.exceptions.ConnectionError("reset")
+
+        with mock.patch.object(_em, "_RETRY_BACKOFF", (0, 0)):
+            for _ in range(3):
+                with self.assertRaises(_requests.exceptions.ConnectionError):
+                    client.call("eastmoney_datacenter", fn)
+            with self.assertRaises(RateLimitedError) as ctx:
+                client.call("eastmoney_datacenter", fn)
+        for banned in ("eastmoney", "tencent", "数据源"):
+            self.assertNotIn(banned, str(ctx.exception))
+        self.assertIn("财务数据服务", str(ctx.exception))
+
+
 class SymbolResolverTests(unittest.TestCase):
     def test_normalize_hk(self):
         self.assertEqual(normalize_hk("00700"), "00700")

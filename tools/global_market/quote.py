@@ -175,7 +175,7 @@ def register_quote_tools(mcp) -> None:
     @handle_exception
     def hk_daily(symbol: str, start_date: str = "", end_date: str = "", adjust: str = "") -> str:
         """
-        获取港股日线行情（腾讯源，前复权可选，默认近3年、最早可到 2000 年代）。
+        获取港股日线行情（前复权可选，默认近3年、最早可到 2000 年代）。
         输出：日期 | 代码 | 名称 | 开盘 | 最高 | 最低 | 收盘 | 涨跌幅 | 成交量(股)。
 
         参数:
@@ -189,20 +189,20 @@ def register_quote_tools(mcp) -> None:
     @mcp.tool()
     @handle_exception
     def hk_weekly(symbol: str, start_date: str = "", end_date: str = "", adjust: str = "") -> str:
-        """获取港股周线行情（腾讯源）。参数同 hk_daily（symbol 如 '00700'=腾讯控股）。"""
+        """获取港股周线行情。参数同 hk_daily（symbol 如 '00700'=腾讯控股）。"""
         return _hk_kline_impl("weekly", symbol, start_date, end_date, adjust)
 
     @mcp.tool()
     @handle_exception
     def hk_monthly(symbol: str, start_date: str = "", end_date: str = "", adjust: str = "") -> str:
-        """获取港股月线行情（腾讯源）。参数同 hk_daily（symbol 如 '00700'=腾讯控股）。"""
+        """获取港股月线行情。参数同 hk_daily（symbol 如 '00700'=腾讯控股）。"""
         return _hk_kline_impl("monthly", symbol, start_date, end_date, adjust)
 
     @mcp.tool()
     @handle_exception
     def us_daily(symbol: str, start_date: str = "", end_date: str = "", adjust: str = "") -> str:
         """
-        获取美股日线行情（腾讯源，前复权可选，默认近3年）。
+        获取美股日线行情（前复权可选，默认近3年）。
         输出：日期 | 代码 | 名称 | 开盘 | 最高 | 最低 | 收盘 | 涨跌幅 | 成交量(股)。
 
         参数:
@@ -216,13 +216,13 @@ def register_quote_tools(mcp) -> None:
     @mcp.tool()
     @handle_exception
     def us_weekly(symbol: str, start_date: str = "", end_date: str = "", adjust: str = "") -> str:
-        """获取美股周线行情（腾讯源）。参数同 us_daily（symbol 如 'AAPL'=苹果）。"""
+        """获取美股周线行情。参数同 us_daily（symbol 如 'AAPL'=苹果）。"""
         return _us_kline_impl("weekly", symbol, start_date, end_date, adjust)
 
     @mcp.tool()
     @handle_exception
     def us_monthly(symbol: str, start_date: str = "", end_date: str = "", adjust: str = "") -> str:
-        """获取美股月线行情（腾讯源）。参数同 us_daily（symbol 如 'AAPL'=苹果）。"""
+        """获取美股月线行情。参数同 us_daily（symbol 如 'AAPL'=苹果）。"""
         return _us_kline_impl("monthly", symbol, start_date, end_date, adjust)
 
     @mcp.tool()
@@ -231,7 +231,7 @@ def register_quote_tools(mcp) -> None:
                            start_date: str = "", end_date: str = "") -> str:
         """
         获取全球指数K线（恒指HSI / 恒生科技HSTECH / 国企指数HSCEI / 道指DJIA /
-        标普500 SPX / 纳指100 NDX / 纳指综合IXIC）。腾讯源。
+        标普500 SPX / 纳指100 NDX / 纳指综合IXIC）。
         输出：日期 | 代码 | 名称 | 开盘 | 最高 | 最低 | 收盘 | 涨跌幅。
 
         参数:

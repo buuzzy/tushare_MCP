@@ -33,6 +33,17 @@ _CIRCUIT_COOLDOWN = 120  # 熔断时长（秒）：实测东财断连恢复为�
 _RETRY_BACKOFF = (0.5, 1.5)  # 连接层错误的内部重试退避（秒）
 _CACHE_MAX = 500
 
+# 对外（LLM/用户）可见的错误消息里，用中性的服务名代替内部域名组名，
+# 避免暴露数据供应商。
+_GROUP_PUBLIC_NAMES: dict[str, str] = {
+    "tencent_quote": "行情数据服务",
+    "eastmoney_quote": "行情数据服务",
+    "eastmoney_datacenter": "财务数据服务",
+    "eastmoney_list": "基础数据服务",
+    "sec_edgar": "SEC 公告服务",
+    "hkex": "披露易公告服务",
+}
+
 # 视为"连接层失败"的异常（触发熔断计数）；数据类异常（空结果等）不计
 _CONNECTION_ERRORS = (
     requests.exceptions.ConnectionError,
@@ -78,7 +89,7 @@ class _EMClient:
                 if state.open_until > now:
                     wait_min = int((state.open_until - now) / 60) + 1
                     raise RateLimitedError(
-                        f"数据源（{group}）触发访问限制，已暂时熔断，"
+                        f"{_GROUP_PUBLIC_NAMES.get(group, '数据服务')}暂时不可用（访问限制），"
                         f"预计约 {wait_min} 分钟后恢复，请稍后再试。"
                     )
                 if state.tokens >= 1.0:

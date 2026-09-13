@@ -109,7 +109,7 @@ def register_finance_global_tools(mcp) -> None:
             return format_report(df, "STD_ITEM_NAME", "AMOUNT", f"港股{title}（{indicator}）", limit=limit)
 
         _hk_report.__doc__ = f"""
-            获取港股{title}（东财 F10，逐科目金额，报告期分行输出）。
+            获取港股{title}（逐科目金额，报告期分行输出）。
 
             参数:
                 symbol: 港股代码（'00700'=腾讯控股）
@@ -129,7 +129,7 @@ def register_finance_global_tools(mcp) -> None:
             return format_report(df, "ITEM_NAME", "AMOUNT", f"美股{title}（{indicator}）", limit=limit)
 
         _us_report.__doc__ = f"""
-            获取美股{title}（东财 F10，逐科目金额，报告期分行输出，美元）。
+            获取美股{title}（逐科目金额，报告期分行输出，美元）。
 
             参数:
                 symbol: 美股代码（'AAPL'=苹果，无需市场前缀）
