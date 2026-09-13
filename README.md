@@ -228,6 +228,20 @@ python server.py --stdio
 | `fund_factor_pro` | 场内基金技术面因子数据（MACD/RSI等） |
 | `stk_mins` | 股票历史分钟行情（5/15/30/60分钟；1分钟未开放） |
 
+### 🌍 全球市场：港美股 (Global)
+| 工具名 | 说明 |
+|:---|:---|
+| `hk_daily` / `hk_weekly` / `hk_monthly` | 港股日/周/月线行情（5位数字代码，如 `00700`；复权可选） |
+| `us_daily` / `us_weekly` / `us_monthly` | 美股日/周/月线行情（ticker，如 `AAPL`；复权可选） |
+| `global_index_daily` | 全球指数 K 线（恒指 HSI / 恒生科技 / 国企 / 道指 / 标普500 / 纳指100 / 纳指综合） |
+| `hk_fina_indicator` | 港股主要财务指标（EPS/ROE/毛利率/营收与净利同比等，年度或报告期） |
+| `us_fina_indicator` | 美股主要财务指标（营收/净利同比/毛利率/ROE/速动比率等，年报或季报） |
+| `hk_income` / `hk_balancesheet` / `hk_cashflow` | 港股三大报表（逐科目金额，报告期分行） |
+| `us_income` / `us_balancesheet` / `us_cashflow` | 美股三大报表（逐科目金额，报告期分行） |
+| `us_filings` | 美股 SEC 申报文件（10-K/10-Q/8-K 等，含原文链接） |
+| `hk_announcements` | 港股公告（披露易官方数据，含 PDF 链接） |
+| `search_symbol` | 港美股代码/名称互查（不确定代码时先查） |
+
 > 完整工具列表请查阅 `tools/` 目录或启动服务后访问 API 文档。
 
 ## 📁 项目结构
