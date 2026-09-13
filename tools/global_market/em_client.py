@@ -20,7 +20,8 @@ from utils.logger import log_debug
 
 # 域名组 -> (每秒令牌数, 桶容量突发)
 _GROUP_RATES: dict[str, tuple[float, int]] = {
-    "tencent_quote": (1.0, 5),        # ifzq.gtimg.cn：K线/指数（线上实测稳定）
+    "tencent_quote": (1.0, 5),        # ifzq.gtimg.cn：港股K线/指数（线上实测稳定）
+    "sina_quote": (1.0, 3),           # finance.sina.com.cn：美股K线（腾讯 fqkline 对美股仅返回1根，实测废弃）
     "eastmoney_quote": (0.3, 3),      # push2his：备用（东财对海外 IP 动态封禁，勿作主力）
     "eastmoney_datacenter": (1.0, 3),  # datacenter：F10 财务（海外稳定）
     "eastmoney_list": (1.0, 2),        # push2：代码列表（24h 缓存，量极小）
@@ -37,6 +38,7 @@ _CACHE_MAX = 500
 # 避免暴露数据供应商。
 _GROUP_PUBLIC_NAMES: dict[str, str] = {
     "tencent_quote": "行情数据服务",
+    "sina_quote": "行情数据服务",
     "eastmoney_quote": "行情数据服务",
     "eastmoney_datacenter": "财务数据服务",
     "eastmoney_list": "基础数据服务",

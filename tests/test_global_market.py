@@ -130,7 +130,7 @@ class SymbolResolverTests(unittest.TestCase):
     def test_resolve_index(self):
         self.assertEqual(resolve_index("HSI"), ("hkHSI", "恒生指数"))
         self.assertEqual(resolve_index("恒指"), ("hkHSI", "恒生指数"))
-        self.assertEqual(resolve_index("spx"), ("usINX", "标普500指数"))
+        self.assertEqual(resolve_index("spx"), (".INX", "标普500指数"))
         self.assertIsNone(resolve_index("AAPL"))
 
     def test_index_aliases_unique_secids(self):

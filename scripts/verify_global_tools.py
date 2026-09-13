@@ -32,25 +32,28 @@ STUB = textwrap.dedent("""
 
 # (工具, 参数, 预期包含的子串或 None)
 CASES = [
-    ("search_symbol", {"query": "00700"}, "00700"),
-    ("search_symbol", {"query": "AAPL", "market": "us"}, "AAPL"),
-    ("hk_fina_indicator", {"symbol": "00700", "limit": 3}, "ROE"),
-    ("hk_income", {"symbol": "00700", "limit": 2}, "营业"),
-    ("hk_balancesheet", {"symbol": "700", "limit": 1}, "报告期"),
-    ("hk_cashflow", {"symbol": "00700", "limit": 1}, "报告期"),
-    ("us_fina_indicator", {"symbol": "AAPL", "limit": 3}, "报告期"),
-    ("us_income", {"symbol": "AAPL", "limit": 2}, "营业收入"),
-    ("us_balancesheet", {"symbol": "AAPL", "limit": 1}, "报告期"),
-    ("us_cashflow", {"symbol": "AAPL", "limit": 1}, "报告期"),
-    ("us_filings", {"symbol": "AAPL", "form": "10-K", "limit": 3}, "10-K"),
-    ("hk_announcements", {"symbol": "00700", "limit": 5}, "公告"),
-    ("hk_daily", {"symbol": "00700", "start_date": "20260901"}, "代码:00700.HK"),
-    ("hk_weekly", {"symbol": "00700", "start_date": "20260801"}, "代码:00700.HK"),
-    ("hk_monthly", {"symbol": "00700", "start_date": "20260601"}, "代码:00700.HK"),
-    ("us_daily", {"symbol": "AAPL", "start_date": "20260901"}, "代码:AAPL"),
-    ("us_weekly", {"symbol": "AAPL", "start_date": "20260801"}, "代码:AAPL"),
-    ("global_index_daily", {"symbol": "HSI", "start_date": "20260901"}, "代码:hkHSI"),
-    ("global_index_daily", {"symbol": "SPX", "start_date": "20260901"}, "代码:usINX"),
+    # (工具, 参数, 预期子串, 最小bar数)  min_bars>0 时校验 Total 根数，防"只返回1根"回归
+    ("search_symbol", {"query": "00700"}, "00700", 0),
+    ("search_symbol", {"query": "AAPL", "market": "us"}, "AAPL", 0),
+    ("hk_fina_indicator", {"symbol": "00700", "limit": 3}, "ROE", 0),
+    ("hk_income", {"symbol": "00700", "limit": 2}, "营业", 0),
+    ("hk_balancesheet", {"symbol": "700", "limit": 1}, "报告期", 0),
+    ("hk_cashflow", {"symbol": "00700", "limit": 1}, "报告期", 0),
+    ("us_fina_indicator", {"symbol": "AAPL", "limit": 3}, "报告期", 0),
+    ("us_income", {"symbol": "AAPL", "limit": 2}, "营业收入", 0),
+    ("us_balancesheet", {"symbol": "AAPL", "limit": 1}, "报告期", 0),
+    ("us_cashflow", {"symbol": "AAPL", "limit": 1}, "报告期", 0),
+    ("us_filings", {"symbol": "AAPL", "form": "10-K", "limit": 3}, "10-K", 0),
+    ("hk_announcements", {"symbol": "00700", "limit": 5}, "公告", 0),
+    ("hk_daily", {"symbol": "00700", "start_date": "20260901"}, "代码:00700.HK", 8),
+    ("hk_weekly", {"symbol": "00700", "start_date": "20260801"}, "代码:00700.HK", 4),
+    ("hk_monthly", {"symbol": "00700", "start_date": "20260601"}, "代码:00700.HK", 3),
+    ("us_daily", {"symbol": "AAPL", "start_date": "20260901"}, "代码:AAPL", 7),
+    ("us_daily", {"symbol": "SNDK", "start_date": "20260827"}, "代码:SNDK", 8),
+    ("us_weekly", {"symbol": "AAPL", "start_date": "20260801"}, "代码:AAPL", 4),
+    ("global_index_daily", {"symbol": "HSI", "start_date": "20260901"}, "代码:hkHSI", 8),
+    ("global_index_daily", {"symbol": "SPX", "start_date": "20260901"}, "代码:.INX", 5),
+    ("global_index_daily", {"symbol": "DJIA", "start_date": "20260901"}, "代码:.DJI", 5),
 ]
 
 
@@ -80,7 +83,7 @@ async def verify(url: str) -> int:
             listed = resp.tools if hasattr(resp, "tools") else resp[0].tools
             names = {t.name for t in listed}
             print(f"server tools: {len(names)} registered")
-            for tool, args, expect in CASES:
+            for tool, args, expect, min_bars in CASES:
                 if tool not in names:
                     print(f"  SKIP  {tool}: not registered")
                     failed += 1
@@ -96,6 +99,16 @@ async def verify(url: str) -> int:
                     elif expect and expect not in text:
                         print(f"  FAIL  {tool}{args}: '{expect}' not in output: {text[:120]}")
                         failed += 1
+                    elif min_bars:
+                        import re as _re
+                        m = _re.search(r"\(Total: (\d+)\)", text)
+                        total = int(m.group(1)) if m else 0
+                        if total < min_bars:
+                            print(f"  FAIL  {tool}{args}: 仅 {total} 根 (< {min_bars}): {text[:100]}")
+                            failed += 1
+                            continue
+                        print(f"  PASS  {tool}: bars={total} (>= {min_bars})")
+                        passed += 1
                     else:
                         first = text.split("\n")[1] if "\n" in text else text
                         print(f"  PASS  {tool}: {first[:100]}")

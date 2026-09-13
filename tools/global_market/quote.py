@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import datetime as dt
 
+import akshare as ak
 import pandas as pd
 import requests
 
@@ -129,6 +130,35 @@ def _fetch_tx_kline(tx_code: str, period: str, start: str, end: str, adjust: str
     return df
 
 
+def _fetch_us_kline(ticker: str, adjust: str) -> pd.DataFrame:
+    """美股 K 线（新浪源全历史，本地过滤日期）。
+
+    腾讯 fqkline 对美股实测仅返回 1 根（无论日期区间/复权参数），不可用，
+    故美股走新浪全历史（一次拉取 + 缓存，akshare 解码）。
+    返回中文列 DataFrame。
+    """
+    fq = adjust if adjust in ("qfq", "hfq") else ""
+    df = em_call(
+        "sina_quote",
+        lambda: ak.stock_us_daily(symbol=ticker, adjust=fq),
+        cache_key=f"us_kl_sina:{ticker}:{fq}",
+        ttl_seconds=TTL_KLINE,
+    )
+    if df is None or df.empty:
+        return pd.DataFrame()
+    out = pd.DataFrame({
+        "日期": df["date"].astype(str),
+        "开盘": pd.to_numeric(df["open"], errors="coerce"),
+        "最高": pd.to_numeric(df["high"], errors="coerce"),
+        "最低": pd.to_numeric(df["low"], errors="coerce"),
+        "收盘": pd.to_numeric(df["close"], errors="coerce"),
+        "成交量": pd.to_numeric(df["volume"], errors="coerce"),
+    })
+    out["涨跌额"] = out["收盘"] - out["收盘"].shift(1)
+    out["涨跌幅"] = out["涨跌额"] / out["收盘"].shift(1) * 100
+    return out
+
+
 def _hk_kline_impl(period: str, symbol: str, start_date: str, end_date: str, adjust: str) -> str:
     log_debug(f"[global_kline] HK/{period} symbol='{symbol}'")
     if not symbol:
@@ -154,7 +184,8 @@ def _us_kline_impl(period: str, symbol: str, start_date: str, end_date: str, adj
         ticker = ticker[:-2]
     start, end, _ = _normalize_dates(start_date, end_date)
     adjust = adjust if adjust in ("qfq", "hfq") else ""
-    df = _fetch_tx_kline(f"us{ticker}", period, start, end, adjust)
+
+    df = _fetch_us_kline(ticker, adjust)
     if df is None or df.empty:
         hint = ""
         try:
@@ -164,8 +195,57 @@ def _us_kline_impl(period: str, symbol: str, start_date: str, end_date: str, adj
         except Exception:
             pass
         hint = hint or "可用 search_symbol 按名称搜索代码"
-        return f"未找到美股{_PERIOD_CN[period]}数据（symbol='{symbol}'）。{hint}"
+        return f"未找到美股行情数据（symbol='{symbol}'）。{hint}"
+
+    df = df[(df["日期"] >= start) & (df["日期"] <= end)]
+    if period in ("weekly", "monthly"):
+        # 新浪源仅提供日线，周/月线本地聚合（美股周线以周五为界）
+        dates = pd.to_datetime(df["日期"])
+        period_key = (dates.dt.to_period("W-FRI") if period == "weekly"
+                      else dates.dt.to_period("M")).astype(str)
+        df = (df.groupby(period_key, sort=True)
+                .agg(日期=("日期", "first"), 开盘=("开盘", "first"), 最高=("最高", "max"),
+                     最低=("最低", "min"), 收盘=("收盘", "last"), 成交量=("成交量", "sum"))
+                .reset_index(drop=True))
+        df["涨跌额"] = df["收盘"] - df["收盘"].shift(1)
+        df["涨跌幅"] = df["涨跌额"] / df["收盘"].shift(1) * 100
+
+    if df.empty:
+        return f"未找到美股行情数据（symbol='{symbol}'，区间 {start}~{end}）"
     return format_kline(df, f"美股{_PERIOD_CN[period]}行情", "美元", ticker, _lookup_name("US", ticker))
+
+
+def _fetch_us_index_kline(code: str, period: str, start: str, end: str) -> pd.DataFrame:
+    """美股指数 K 线（新浪源，全历史+缓存+本地过滤，周/月本地聚合）。"""
+    df = em_call(
+        "sina_quote",
+        lambda: ak.index_us_stock_sina(symbol=code),
+        cache_key=f"us_idx:{code}",
+        ttl_seconds=TTL_KLINE,
+    )
+    if df is None or df.empty:
+        return pd.DataFrame()
+    out = pd.DataFrame({
+        "日期": df["date"].astype(str),
+        "开盘": pd.to_numeric(df["open"], errors="coerce"),
+        "最高": pd.to_numeric(df["high"], errors="coerce"),
+        "最低": pd.to_numeric(df["low"], errors="coerce"),
+        "收盘": pd.to_numeric(df["close"], errors="coerce"),
+        "成交量": pd.to_numeric(df["volume"], errors="coerce"),
+    })
+    out = out[(out["日期"] >= start) & (out["日期"] <= end)]
+    if period in ("weekly", "monthly") and not out.empty:
+        dates = pd.to_datetime(out["日期"])
+        period_key = (dates.dt.to_period("W-FRI") if period == "weekly"
+                      else dates.dt.to_period("M")).astype(str)
+        out = (out.groupby(period_key, sort=True)
+                  .agg(日期=("日期", "first"), 开盘=("开盘", "first"), 最高=("最高", "max"),
+                       最低=("最低", "min"), 收盘=("收盘", "last"), 成交量=("成交量", "sum"))
+                  .reset_index(drop=True))
+    if not out.empty:
+        out["涨跌额"] = out["收盘"] - out["收盘"].shift(1)
+        out["涨跌幅"] = out["涨跌额"] / out["收盘"].shift(1) * 100
+    return out
 
 
 def register_quote_tools(mcp) -> None:
@@ -249,7 +329,11 @@ def register_quote_tools(mcp) -> None:
         if not resolved:
             return ("错误：暂不支持的指数。当前支持：HSI恒指 / HSTECH恒生科技 / "
                     "HSCEI国企指数 / DJIA道指 / SPX标普500 / NDX纳指100 / IXIC纳指综合")
-        tx_code, name = resolved
+        index_code, name = resolved
         start, end, _ = _normalize_dates(start_date, end_date)
-        df = _fetch_tx_kline(tx_code, period, start, end, "")
-        return format_kline(df, f"{name}{_PERIOD_CN[period]}行情", "点", tx_code, name)
+        # 港股指数走腾讯；美股指数走新浪（腾讯 fqkline 对 us 前缀区间仅返回 1 根）
+        if index_code.startswith("."):
+            df = _fetch_us_index_kline(index_code, period, start, end)
+        else:
+            df = _fetch_tx_kline(index_code, period, start, end, "")
+        return format_kline(df, f"{name}{_PERIOD_CN[period]}行情", "点", index_code, name)
