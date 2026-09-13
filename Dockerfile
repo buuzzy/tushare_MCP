@@ -1,5 +1,6 @@
-# 使用一个官方、轻量级的Python 3.10镜像作为基础
-FROM python:3.10-slim
+# 使用一个官方、轻量级的Python 3.11镜像作为基础
+# （akshare>=1.18 要求 Python>=3.11；tinyshare/minishare 为 py3-none-any 纯 Python 包，兼容）
+FROM python:3.11-slim
 
 # 安装系统依赖 (您的原始设置，保持不变)
 RUN apt-get update && apt-get install -y --no-install-recommends \
