@@ -176,21 +176,43 @@ class EMClientTests(unittest.TestCase):
     def test_circuit_opens_after_consecutive_failures(self):
         import requests as _requests
 
+        from tools.global_market import em_client as _em
+
         client = _EMClient()
         boom = _requests.exceptions.ConnectionError("reset")
-        fails = []
+        calls = []
 
         def fn():
-            fails.append(1)
+            calls.append(1)
             raise boom
 
-        for _ in range(3):  # 阈值 3：偶发首连抖动（1-2 次）不应触发熔断
-            with self.assertRaises(_requests.exceptions.ConnectionError):
+        with mock.patch.object(_em, "_RETRY_BACKOFF", (0, 0)):
+            for _ in range(3):  # 阈值 3：一次 call 内部重试耗尽计一次调用级失败
+                with self.assertRaises(_requests.exceptions.ConnectionError):
+                    client.call("hkex", fn)
+            with self.assertRaises(RateLimitedError):
                 client.call("hkex", fn)
-        # 连续三次连接失败后熔断打开
-        with self.assertRaises(RateLimitedError):
-            client.call("hkex", fn)
-        self.assertEqual(len(fails), 3)
+        # 每次 call 内部尝试 3 次（首次 + 2 重试）
+        self.assertEqual(len(calls), 9)
+
+    def test_transient_connection_error_recovers_without_circuit_count(self):
+        import requests as _requests
+
+        from tools.global_market import em_client as _em
+
+        client = _EMClient()
+        state = {"n": 0}
+
+        def flaky():
+            state["n"] += 1
+            if state["n"] == 1:
+                raise _requests.exceptions.ConnectionError("cold start reset")
+            return "ok"
+
+        with mock.patch.object(_em, "_RETRY_BACKOFF", (0,)):
+            self.assertEqual(client.call("hkex", flaky), "ok")
+        # 首连抖动被内部重试消化，未计入熔断
+        self.assertEqual(client._groups["hkex"].consecutive_failures, 0)
 
     def test_data_error_does_not_trip_circuit(self):
         client = _EMClient()

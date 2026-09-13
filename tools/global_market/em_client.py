@@ -27,8 +27,9 @@ _GROUP_RATES: dict[str, tuple[float, int]] = {
     "hkex": (1.0, 2),                  # 披露易，保守
 }
 
-_CIRCUIT_FAILS = 3       # 连续连接层失败 N 次后熔断（偶发首连抖动不应触发）
+_CIRCUIT_FAILS = 3       # 连续调用级失败 N 次后熔断（内部重试耗尽才算一次）
 _CIRCUIT_COOLDOWN = 120  # 熔断时长（秒）：实测东财断连恢复为分钟级，10 分钟过长
+_RETRY_BACKOFF = (0.5, 1.5)  # 连接层错误的内部重试退避（秒）
 _CACHE_MAX = 500
 
 # 视为"连接层失败"的异常（触发熔断计数）；数据类异常（空结果等）不计
@@ -111,6 +112,10 @@ class _EMClient:
     ) -> Any:
         """经限频与缓存执行一次外部数据调用。
 
+        连接层错误（断连/超时）会在内部带退避重试至多 2 次；重试全部耗尽才
+        计一次"调用级失败"并进入熔断计数。实测东财 push2his 存在"冷启动头
+        1-2 次连接被 reset、之后稳定"的抖动，靠内部重试消化而不是熔断。
+
         Args:
             group: 域名组名（见 _GROUP_RATES）
             fn: 无参可调用，执行真实请求（如 akshare 函数的 partial）
@@ -126,17 +131,25 @@ class _EMClient:
                 log_debug(f"[em_client] cache HIT '{cache_key}'")
                 return cached
 
-        self._acquire(group)
-        try:
-            value = fn()
-        except _CONNECTION_ERRORS:
-            self._record_failure(group)
-            raise
-        self._record_success(group)
+        last_error: BaseException = RuntimeError("unreachable")
+        for attempt in range(len(_RETRY_BACKOFF) + 1):
+            self._acquire(group)  # 重试同样消耗令牌，尊重限速
+            try:
+                value = fn()
+            except _CONNECTION_ERRORS as e:
+                last_error = e
+                log_debug(f"[em_client] {group} connection error on attempt "
+                          f"{attempt + 1}: {type(e).__name__}")
+                if attempt < len(_RETRY_BACKOFF):
+                    time.sleep(_RETRY_BACKOFF[attempt])
+                continue
+            self._record_success(group)
+            if cache_key and ttl_seconds > 0:
+                self._store_cache(cache_key, value)
+            return _copy_value(value)
 
-        if cache_key and ttl_seconds > 0:
-            self._store_cache(cache_key, value)
-        return _copy_value(value)
+        self._record_failure(group)
+        raise last_error
 
     def _peek_cache(self, key: str, ttl: float) -> Optional[Any]:
         with self._cond:
