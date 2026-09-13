@@ -44,3 +44,6 @@ websocket-client==1.8.0
 websockets==15.0.1
 tinyshare
 minishare
+# 港美股工具（tools/global_market）：东财源行情与财务。
+# 传递依赖（py-mini-racer/jsonpath 等）由 pip 解析安装。
+akshare==1.18.94

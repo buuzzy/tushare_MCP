@@ -91,6 +91,24 @@ TOOL_ALIASES = {
     "basic_info": "stock_basic",
     "fund_data": "fund_daily",
     "fund_info": "fund_nav",
+    # 港美股工具常见幻觉名
+    "hk_quote": "hk_daily",
+    "us_quote": "us_daily",
+    "hk_stock_daily": "hk_daily",
+    "us_stock_daily": "us_daily",
+    "hk_financial_indicator": "hk_fina_indicator",
+    "us_financial_indicator": "us_fina_indicator",
+    "hk_balance_sheet": "hk_balancesheet",
+    "us_balance_sheet": "us_balancesheet",
+    "us_cash_flow": "us_cashflow",
+    "hk_cash_flow": "hk_cashflow",
+    "hk_announcement": "hk_announcements",
+    "us_announcement": "us_filings",
+    "us_announcements": "us_filings",
+    "search_symbols": "search_symbol",
+    "stock_search": "search_symbol",
+    "global_index": "global_index_daily",
+    "index_global_daily": "global_index_daily",
 }
 
 def register_tool_aliases(mcp: FastMCP):

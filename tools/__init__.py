@@ -27,6 +27,7 @@ from .stock.quote.top_list import register_top_list_tools
 from .stock.finance import register_finance_tools
 from .fund import register_fund_tools
 from .corpus import register_corpus_tools
+from .global_market import register_global_market_tools
 
 from typing import List, Optional
 from utils.logger import log_debug
@@ -73,6 +74,7 @@ def register_all_tools(mcp, categories: Optional[List[str]] = None):
         'finance': register_finance_tools,
         'fund': register_fund_tools,
         'corpus': register_corpus_tools,
+        'global': register_global_market_tools,
     }
     
     if not categories:

@@ -42,3 +42,6 @@ Thumbs.db
 # User requested exclusions
 api_docs/
 mcp_test/
+.venv/
+__pycache__/
+*.pyc
