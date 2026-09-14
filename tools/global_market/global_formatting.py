@@ -91,7 +91,12 @@ def format_kline(
                          else f"成交额:{row['成交额']}{currency}")
         lines.append(" | ".join(parts))
     if len(display) < len(df):
-        lines.append(f"... (共 {len(df)} 条，仅显示最近 {per_code_limit} 条)")
+        # 截断时必须自述完整区间：Agent 会把首行可见日期误当数据起点，
+        # 并对缺失区间（上市前）自行"推测"上市时间（2026-09-14 实测误报）
+        lines.append(
+            f"... (共 {len(df)} 条，数据区间 {df['日期'].iloc[0]} ~ {display['日期'].iloc[-1]}，"
+            f"仅显示最近 {per_code_limit} 条)"
+        )
     return "\n".join(lines)
 
 

@@ -269,6 +269,14 @@ class FormattingTests(unittest.TestCase):
         self.assertIn("成交量:15628379股", out)
         self.assertIn("成交额:6,670,000,000.00港元", out)
 
+    def test_format_kline_truncated_footer_states_range(self):
+        # 截断时脚注必须自述完整区间（Agent 会把首行可见日期误当数据起点）
+        dates = pd.date_range("2026-01-01", periods=60, freq="D").strftime("%Y-%m-%d")
+        df = pd.DataFrame({"日期": dates, "收盘": [40.0] * 60, "成交量": [1.0] * 60})
+        out = format_kline(df, "港股日线行情", "港元", "02714.HK", "牧原股份")
+        self.assertIn("共 60 条，数据区间 2026-01-01 ~ 2026-03-01，仅显示最近 50 条", out)
+        self.assertNotIn("日期:2026-01-01", out)  # 首行被截断，只在脚注出现
+
     def test_format_kline_empty(self):
         self.assertEqual(format_kline(pd.DataFrame(), "港股日线行情", "港元", "x", "y"),
                          "未找到港股日线行情数据")
