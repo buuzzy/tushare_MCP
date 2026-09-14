@@ -62,8 +62,8 @@ def _tx_param(tx_code: str, period: str, seg_start: str, seg_end: str, fq: str) 
     return f"{base},{fq}"
 
 
-def _tx_fetch_once(tx_code: str, period: str, seg_start: str, seg_end: str, adjust: str) -> list[list]:
-    """单次腾讯 K 线请求，返回 bars 列表。"""
+def _tx_fetch_once(tx_code: str, period: str, seg_start: str, seg_end: str, adjust: str) -> tuple[list[list], str]:
+    """单次腾讯 K 线请求，返回 (bars, 证券中文名)。名称取自响应 qt 段（可能为空）。"""
     fq = adjust if adjust in ("qfq", "hfq") else ""
 
     def _do():
@@ -86,23 +86,34 @@ def _tx_fetch_once(tx_code: str, period: str, seg_start: str, seg_end: str, adju
             f"msg={str(resp.get('msg'))[:80]} keys={list((resp.get('data') or {}).keys())[:5]}"
         )
     key = f"{fq}{_PERIOD_TX[period]}" if fq else _PERIOD_TX[period]
-    return node.get(key) or node.get(_PERIOD_TX[period]) or []
+    bars = node.get(key) or node.get(_PERIOD_TX[period]) or []
+    qt_row = (node.get("qt") or {}).get(tx_code) or []
+    name = str(qt_row[1]).strip() if len(qt_row) > 1 else ""
+    return bars, name
 
 
-def _fetch_tx_kline(tx_code: str, period: str, start: str, end: str, adjust: str) -> pd.DataFrame:
+def _fetch_tx_kline(tx_code: str, period: str, start: str, end: str, adjust: str) -> tuple[pd.DataFrame, str]:
     """按日期分段拉取腾讯 K 线并拼接（单次上限约 800 根）。
 
     腾讯按"区间末尾截取 count 根"返回，故从 start 起逐段向前推进。
+    空段不终止扫描：上市前/长期停牌的段无数据属正常，跳到下一段继续
+    （实测次新股 hk02714 默认近 3 年窗口首段全空，一旦 break 即误报无数据）。
+    返回 (DataFrame, 证券中文名)；名称取自任一段响应的 qt 段，可能为空。
     """
     all_bars: list[list] = []
+    name = ""
     seg_days = _TX_SEGMENT_DAYS * (5 if period == "weekly" else 22 if period == "monthly" else 1)
     cursor = start
     while cursor <= end:
         seg_end_dt = dt.datetime.strptime(cursor, "%Y-%m-%d").date() + dt.timedelta(days=seg_days)
         seg_end = min(seg_end_dt.isoformat(), end)
-        bars = _tx_fetch_once(tx_code, period, cursor, seg_end, adjust)
+        bars, seg_name = _tx_fetch_once(tx_code, period, cursor, seg_end, adjust)
+        name = name or seg_name
         if not bars:
-            break
+            if seg_end >= end:
+                break  # 已扫完全区间仍无数据
+            cursor = (seg_end_dt + dt.timedelta(days=1)).isoformat()  # 上市前/停牌空段，跳过
+            continue
         for bar in bars:
             if not all_bars or bar[0] > all_bars[-1][0]:
                 all_bars.append(bar)
@@ -112,7 +123,7 @@ def _fetch_tx_kline(tx_code: str, period: str, start: str, end: str, adjust: str
         cursor = (last_date + dt.timedelta(days=1)).isoformat()
 
     if not all_bars:
-        return pd.DataFrame()
+        return pd.DataFrame(), name
     # 腾讯 bar 长度不固定（6/7/8 元素，含成交额与否随市场而异），按实际长度适配列名
     base_cols = ["日期", "开盘", "收盘", "最高", "最低", "成交量", "成交额"]
     max_len = max(len(bar) for bar in all_bars)
@@ -127,7 +138,7 @@ def _fetch_tx_kline(tx_code: str, period: str, start: str, end: str, adjust: str
     # 自算涨跌额/涨跌幅（腾讯不返回）
     df["涨跌额"] = df["收盘"] - df["收盘"].shift(1)
     df["涨跌幅"] = df["涨跌额"] / df["收盘"].shift(1) * 100
-    return df
+    return df, name
 
 
 def _fetch_us_kline(ticker: str, adjust: str) -> pd.DataFrame:
@@ -168,8 +179,21 @@ def _hk_kline_impl(period: str, symbol: str, start_date: str, end_date: str, adj
         return f"错误：无法识别的港股代码 '{symbol}'（示例：00700 或 700）"
     start, end, _ = _normalize_dates(start_date, end_date)
     adjust = adjust if adjust in ("qfq", "hfq") else ""
-    df = _fetch_tx_kline(f"hk{code}", period, start, end, adjust)
-    return format_kline(df, f"港股{_PERIOD_CN[period]}行情", "港元", f"{code}.HK", _lookup_name("HK", code))
+    df, tx_name = _fetch_tx_kline(f"hk{code}", period, start, end, adjust)
+    name = tx_name or _lookup_name("HK", code)
+    if df.empty:
+        hint = ""
+        try:
+            rows = [r for r in search_symbols(symbol, market="hk", limit=5)
+                    if r["name"] != r["code"]]
+            if rows:
+                hint = "候选：" + "; ".join(f"{r['code']} {r['name']}" for r in rows)
+        except Exception:
+            pass
+        hint = hint or "可用 search_symbol 按名称搜索代码"
+        return (f"未找到港股{_PERIOD_CN[period]}行情数据（symbol='{symbol}'，"
+                f"区间 {start}~{end}）。{hint}")
+    return format_kline(df, f"港股{_PERIOD_CN[period]}行情", "港元", f"{code}.HK", name)
 
 
 def _us_kline_impl(period: str, symbol: str, start_date: str, end_date: str, adjust: str) -> str:
@@ -335,5 +359,5 @@ def register_quote_tools(mcp) -> None:
         if index_code.startswith("."):
             df = _fetch_us_index_kline(index_code, period, start, end)
         else:
-            df = _fetch_tx_kline(index_code, period, start, end, "")
+            df, _ = _fetch_tx_kline(index_code, period, start, end, "")
         return format_kline(df, f"{name}{_PERIOD_CN[period]}行情", "点", index_code, name)

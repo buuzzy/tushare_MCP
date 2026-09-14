@@ -150,6 +150,106 @@ class TxParamTests(unittest.TestCase):
         self.assertIn("week", _tx_param("usAAPL", "weekly", "a", "b", "qfq"))
 
 
+class TxKlinePaginationTests(unittest.TestCase):
+    """分段拉取：上市前/停牌的空段应跳过而不是终止（hk02714 次新股回归）。"""
+
+    def test_skips_pre_listing_empty_segments(self):
+        from tools.global_market import quote
+
+        real_bars = [["2026-02-06", "38.0", "40.5", "37.5", "40.0", "1000"],
+                     ["2026-02-09", "40.0", "41.0", "39.5", "40.5", "1200"]]
+        calls = []
+
+        def fake_fetch(tx_code, period, seg_start, seg_end, adjust):
+            calls.append((seg_start, seg_end))
+            if seg_end <= "2025-11-22":
+                return [], ""  # 上市前空段
+            return list(real_bars), "牧原股份"
+
+        with mock.patch.object(quote, "_tx_fetch_once", side_effect=fake_fetch):
+            df, name = quote._fetch_tx_kline("hk02714", "daily", "2023-09-14", "2026-09-14", "")
+
+        self.assertEqual(name, "牧原股份")
+        self.assertEqual(len(df), 2)
+        self.assertGreaterEqual(len(calls), 2)  # 空段后继续扫描而非 break
+
+    def test_all_empty_returns_empty_df_with_name(self):
+        from tools.global_market import quote
+
+        with mock.patch.object(quote, "_tx_fetch_once", return_value=([], "")):
+            df, name = quote._fetch_tx_kline("hk99999", "daily", "2026-01-01", "2026-02-01", "")
+        self.assertTrue(df.empty)
+        self.assertEqual(name, "")
+
+    def test_returns_name_from_empty_segment(self):
+        from tools.global_market import quote
+
+        # 全区间无数据但 qt 带名称（代码有效、区间在上市前）
+        with mock.patch.object(quote, "_tx_fetch_once", return_value=([], "牧原股份")):
+            df, name = quote._fetch_tx_kline("hk02714", "daily", "2023-01-01", "2024-01-01", "")
+        self.assertTrue(df.empty)
+        self.assertEqual(name, "牧原股份")
+
+
+class SuggestParseTests(unittest.TestCase):
+    def test_parse_filters_and_market(self):
+        from tools.global_market.symbol_resolver import _parse_suggest
+        resp = {"QuotationCodeTable": {"Data": [
+            {"Code": "002714", "Name": "牧原股份", "Classify": "AStock"},
+            {"Code": "02714", "Name": "牧原股份", "Classify": "HK"},
+            {"Code": "16542", "Name": "牧原华泰七六购A", "Classify": "HK"},
+            {"Code": "AAPL", "Name": "苹果", "Classify": "UsStock"},
+            {"Code": "BK0666", "Name": "苹果概念", "Classify": "BK"},
+        ]}}
+        rows = _parse_suggest(resp, "all", 10)
+        self.assertEqual([r["code"] for r in rows], ["02714", "AAPL"])
+        self.assertEqual(rows[0]["name"], "牧原股份")
+        hk_only = _parse_suggest(resp, "hk", 10)
+        self.assertEqual([r["code"] for r in hk_only], ["02714"])
+
+    def test_parse_empty_and_malformed(self):
+        from tools.global_market.symbol_resolver import _parse_suggest
+        self.assertEqual(_parse_suggest({}, "all", 10), [])
+        self.assertEqual(_parse_suggest({"QuotationCodeTable": {"Data": None}}, "all", 10), [])
+
+
+class SearchFallbackTests(unittest.TestCase):
+    def test_clist_miss_falls_back_to_suggest(self):
+        from tools.global_market import symbol_resolver as sr
+        with mock.patch.object(sr, "_load_hk_list", return_value=[]), \
+             mock.patch.object(sr, "_load_us_list", return_value=[]), \
+             mock.patch.object(sr, "_suggest_search",
+                               return_value=[{"market": "HK", "code": "02714", "name": "牧原股份"}]):
+            rows = sr.search_symbols("牧原", market="hk")
+        self.assertEqual(rows[0]["code"], "02714")
+        self.assertEqual(rows[0]["name"], "牧原股份")
+
+    def test_clist_failure_degrades_to_suggest(self):
+        from tools.global_market import symbol_resolver as sr
+
+        def _boom():
+            raise RuntimeError("circuit open")
+
+        with mock.patch.object(sr, "_load_hk_list", side_effect=_boom), \
+             mock.patch.object(sr, "_load_us_list", side_effect=_boom), \
+             mock.patch.object(sr, "_suggest_search",
+                               return_value=[{"market": "HK", "code": "00700", "name": "腾讯控股"}]):
+            rows = sr.search_symbols("腾讯", market="hk")
+        self.assertEqual(rows[0]["name"], "腾讯控股")
+
+    def test_suggest_failure_falls_back_to_passthrough(self):
+        from tools.global_market import symbol_resolver as sr
+
+        def _boom(*a, **k):
+            raise RuntimeError("down")
+
+        with mock.patch.object(sr, "_load_hk_list", return_value=[]), \
+             mock.patch.object(sr, "_load_us_list", return_value=[]), \
+             mock.patch.object(sr, "_suggest_search", side_effect=_boom):
+            rows = sr.search_symbols("02714", market="hk")
+        self.assertEqual(rows, [{"market": "HK", "code": "02714", "name": "02714"}])
+
+
 class FormattingTests(unittest.TestCase):
     def _kline_df(self):
         return pd.DataFrame({
@@ -321,9 +421,22 @@ class NetworkIntegrationTests(unittest.TestCase):
         self.assertGreaterEqual(len(rows), 1)
 
     def test_hk_kline(self):
-        from tools.global_market.quote import _fetch_hk_kline
-        df = _fetch_hk_kline("00700", "daily", "20260901", "20260913", "")
+        from tools.global_market.quote import _fetch_tx_kline
+        df, name = _fetch_tx_kline("hk00700", "daily", "2026-09-01", "2026-09-13", "")
         self.assertFalse(df.empty)
+        self.assertEqual(name, "腾讯控股")
+
+    def test_hk_kline_new_listing_default_window(self):
+        # 次新股回归：默认 3 年窗口首段在上市前，不得误报无数据
+        from tools.global_market.quote import _fetch_tx_kline
+        df, name = _fetch_tx_kline("hk02714", "daily", "2026-01-01", "2026-09-14", "")
+        self.assertFalse(df.empty)
+        self.assertEqual(name, "牧原股份")
+
+    def test_suggest_search_online(self):
+        from tools.global_market.symbol_resolver import _suggest_search
+        rows = _suggest_search("牧原", "hk", 10)
+        self.assertTrue(any(r["code"] == "02714" and r["name"] == "牧原股份" for r in rows))
 
 
 if __name__ == "__main__":

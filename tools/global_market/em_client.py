@@ -25,6 +25,7 @@ _GROUP_RATES: dict[str, tuple[float, int]] = {
     "eastmoney_quote": (0.3, 3),      # push2his：备用（东财对海外 IP 动态封禁，勿作主力）
     "eastmoney_datacenter": (1.0, 3),  # datacenter：F10 财务（海外稳定）
     "eastmoney_list": (1.0, 2),        # push2：代码列表（24h 缓存，量极小）
+    "eastmoney_suggest": (1.0, 3),     # searchadapter：全库代码/名称搜索（24h 缓存）
     "sec_edgar": (8.0, 8),             # SEC EDGAR 官方上限 10 req/s，留余量
     "hkex": (1.0, 2),                  # 披露易，保守
 }
@@ -42,6 +43,7 @@ _GROUP_PUBLIC_NAMES: dict[str, str] = {
     "eastmoney_quote": "行情数据服务",
     "eastmoney_datacenter": "财务数据服务",
     "eastmoney_list": "基础数据服务",
+    "eastmoney_suggest": "基础数据服务",
     "sec_edgar": "SEC 公告服务",
     "hkex": "披露易公告服务",
 }

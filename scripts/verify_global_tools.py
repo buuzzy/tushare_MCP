@@ -36,6 +36,9 @@ CASES = [
     ("search_symbol", {"query": "00700"}, "00700", 0),
     ("search_symbol", {"query": "AAPL", "market": "us"}, "AAPL", 0),
     ("search_symbol", {"query": "SNDK", "market": "us"}, "SNDK", 0),
+    # 次新股/中文名搜索回归（活跃表快照不含 02714，靠 suggest 全库兜底）
+    ("search_symbol", {"query": "牧原", "market": "hk"}, "02714", 0),
+    ("search_symbol", {"query": "苹果", "market": "us"}, "AAPL", 0),
     ("hk_fina_indicator", {"symbol": "00700", "limit": 3}, "ROE", 0),
     ("hk_income", {"symbol": "00700", "limit": 2}, "营业", 0),
     ("hk_balancesheet", {"symbol": "700", "limit": 1}, "报告期", 0),
@@ -47,6 +50,10 @@ CASES = [
     ("us_filings", {"symbol": "AAPL", "form": "10-K", "limit": 3}, "10-K", 0),
     ("hk_announcements", {"symbol": "00700", "limit": 5}, "公告", 0),
     ("hk_daily", {"symbol": "00700", "start_date": "20260901"}, "代码:00700.HK", 8),
+    # 次新股回归：默认近 3 年窗口首段在上市前（2026-02-06 上市），须跳过空段
+    ("hk_daily", {"symbol": "02714"}, "名称:牧原股份", 100),
+    # 上市前区间无数据：错误消息应带候选 hint（suggest 回填中文名）
+    ("hk_daily", {"symbol": "02714", "start_date": "20230101", "end_date": "20240101"}, "牧原股份", 0),
     ("hk_weekly", {"symbol": "00700", "start_date": "20260801"}, "代码:00700.HK", 4),
     ("hk_monthly", {"symbol": "00700", "start_date": "20260601"}, "代码:00700.HK", 3),
     ("us_daily", {"symbol": "AAPL", "start_date": "20260901"}, "代码:AAPL", 7),

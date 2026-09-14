@@ -1,7 +1,11 @@
 """港美股/全球指数的代码解析与搜索。
 
-代码表来源：东财 push2 clist 接口（按成交额降序拉前若干页，覆盖活跃股票，
-24h 进程内缓存）。本机/服务 IP 若触发东财限流，列表加载失败时：
+代码表来源（互为兜底）：
+- 东财 push2 clist：按成交额降序拉前若干页（24h 缓存），覆盖活跃股票；
+  仅靠它时次新股/低成交股会漏（实测 02714 牧原、SNDK 均缺席）。
+- 东财 suggest（searchadapter 域，全库）：名称/代码/拼音缩写搜索，
+  clist 未命中或加载失败时的主兜底；两者均不可用时代码直查透传。
+本机/服务 IP 若触发东财限流，列表加载失败时：
 - search_symbol 返回友好错误
 - 美股 K 线前缀解析回退为 105→106→107 顺序尝试
 """
@@ -19,6 +23,9 @@ from utils.logger import log_debug
 _CLIST_URL = "https://push2.eastmoney.com/api/qt/clist/get"
 _LIST_PAGES = 20          # 每页 100 条，共 2000 只活跃股
 _LIST_PAGE_SIZE = 100
+
+_SUGGEST_URL = "https://searchadapter.eastmoney.com/api/suggest/get"
+_SUGGEST_TOKEN = "D43BF722C8E33BDC906FB84D85E326E8"  # 东财 web 端公开 token
 
 # 全球指数别名 -> (指数代码, 中文名)。港股（hk* 前缀）走腾讯；美股指数（. 前缀）走新浪
 # （腾讯 fqkline 对 us 前缀区间请求仅返回 1 根，实测废弃）
@@ -120,6 +127,53 @@ def _load_us_list() -> list[dict]:
     )
 
 
+def _parse_suggest(resp: dict, market: str, limit: int) -> list[dict]:
+    """解析 suggest 响应，过滤出港美股正股（剔除窝轮/债券/板块/A股）。
+
+    港股窝轮/牛熊证代码 >= 10000，与 _load_hk_list 同样按 '09999' 截断。
+    """
+    rows = (resp.get("QuotationCodeTable") or {}).get("Data") or []
+    out: list[dict] = []
+    for item in rows:
+        classify = item.get("Classify")
+        code = str(item.get("Code", "")).strip()
+        name = str(item.get("Name", "")).strip()
+        if classify == "HK" and code.isdigit() and code <= "09999":
+            entry = {"market": "HK", "code": code.zfill(5), "name": name}
+        elif classify == "UsStock" and code:
+            entry = {"market": "US", "code": code.upper(), "name": name}
+        else:
+            continue
+        if market not in ("all", entry["market"].lower()):
+            continue
+        if entry not in out:
+            out.append(entry)
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _suggest_search(query: str, market: str, limit: int) -> list[dict]:
+    """东财 suggest 全库搜索（名称/代码/拼音缩写，带中文名）。
+
+    活跃表只是成交额前若干页的快照，次新股/低成交股常缺席（实测：
+    牧原 02714、SNDK 均不在快照内），名称搜索以此为主兜底。
+    """
+    def _do() -> list[dict]:
+        resp = requests.get(
+            _SUGGEST_URL,
+            params={"input": query, "type": "14", "token": _SUGGEST_TOKEN,
+                    "count": "20"},
+            timeout=15,
+        ).json()
+        return _parse_suggest(resp, market, limit)
+
+    return em_call(
+        "eastmoney_suggest", _do,
+        cache_key=f"suggest:{market}:{query}", ttl_seconds=TTL_DAILY,
+    )
+
+
 def resolve_us_prefix(ticker: str) -> Optional[str]:
     """美股 ticker -> 市场前缀（105 纳斯达克 / 106 纽交所 / 107 美交所）。
 
@@ -208,7 +262,7 @@ def _us_name_from_em(ticker: str) -> Optional[str]:
 
 
 def search_symbols(query: str, market: str = "all", limit: int = 10) -> list[dict]:
-    """按代码前缀或名称包含匹配港股/美股活跃股。
+    """按代码前缀或名称包含匹配港股/美股证券（活跃表 -> suggest 全库 -> 代码透传）。
 
     美股 query 形如 ticker 而列表未命中时，用新浪源直接验证兜底；
     港股 5 位数字代码同理直接透传（列表仅用于补中文名）。
@@ -221,6 +275,13 @@ def search_symbols(query: str, market: str = "all", limit: int = 10) -> list[dic
     q_upper = query.upper()
     results: list[dict] = []
 
+    def safe_list(loader) -> list[dict]:
+        try:
+            return loader()
+        except Exception as e:  # clist 加载失败不阻塞搜索，降级到 suggest
+            log_debug(f"[symbol_resolver] list load failed: {e}")
+            return []
+
     def match(tag: str, rows: list[dict]) -> None:
         for row in rows:
             code, name = row["code"], row["name"]
@@ -230,9 +291,16 @@ def search_symbols(query: str, market: str = "all", limit: int = 10) -> list[dic
                     return
 
     if market in ("all", "hk"):
-        match("HK", _load_hk_list())
+        match("HK", safe_list(_load_hk_list))
     if len(results) < limit and market in ("all", "us"):
-        match("US", _load_us_list())
+        match("US", safe_list(_load_us_list))
+
+    # suggest 全库兜底：活跃表是成交额快照，次新股/低成交股/名称搜索常缺席
+    if not results:
+        try:
+            results = _suggest_search(query, market, limit)
+        except Exception as e:
+            log_debug(f"[symbol_resolver] suggest search failed: {e}")
 
     # ticker / 数字代码直查兜底（活跃表是快照，覆盖不稳定）
     if not results:
