@@ -29,7 +29,8 @@ _TX_URL = "https://ifzq.gtimg.cn/appstock/app/fqkline/get"
 # 注：kline/get（不复权端点）实测已废弃（任何 param 均返回 code=11）；
 # 不复权统一走 fqkline + 空 fq 段（尾逗号），实测 800 bars 正常。
 _TX_BATCH = 800        # 单次请求上限（实测 800 可用）
-_TX_SEGMENT_DAYS = 800  # 分页拉取时每段覆盖的交易日跨度估算
+_TX_SEGMENT_DAYS = 800  # 每段自然日跨度（≈538 个交易日，必定低于单次 800 根上限——
+                        # 因此绝不能以"返回不足一批"判定区间结束，见 _fetch_tx_kline）
 
 
 def _lookup_name(market: str, code: str) -> str:
@@ -95,9 +96,12 @@ def _tx_fetch_once(tx_code: str, period: str, seg_start: str, seg_end: str, adju
 def _fetch_tx_kline(tx_code: str, period: str, start: str, end: str, adjust: str) -> tuple[pd.DataFrame, str]:
     """按日期分段拉取腾讯 K 线并拼接（单次上限约 800 根）。
 
-    腾讯按"区间末尾截取 count 根"返回，故从 start 起逐段向前推进。
-    空段不终止扫描：上市前/长期停牌的段无数据属正常，跳到下一段继续
-    （实测次新股 hk02714 默认近 3 年窗口首段全空，一旦 break 即误报无数据）。
+    腾讯按"区间内截取至多 count 根"返回，故从 start 起逐段向前推进。
+    - 空段不终止扫描：上市前/长期停牌的段无数据属正常，跳到下一段继续
+      （实测次新股 hk02714 默认近 3 年窗口首段全空，一旦 break 即误报无数据）。
+    - 段是否结束只看 last_date 是否到达 end：800 自然日 ≈ 538 个交易日，
+      首段必然"不足一批"（<800 根），旧判据 len(bars)<_TX_BATCH 即停导致
+      长窗口止步首段（2026-09-14 实测 hk00700 默认窗口数据停在 2025-11-21）。
     返回 (DataFrame, 证券中文名)；名称取自任一段响应的 qt 段，可能为空。
     """
     all_bars: list[list] = []
@@ -118,7 +122,7 @@ def _fetch_tx_kline(tx_code: str, period: str, start: str, end: str, adjust: str
             if not all_bars or bar[0] > all_bars[-1][0]:
                 all_bars.append(bar)
         last_date = dt.datetime.strptime(bars[-1][0], "%Y-%m-%d").date()
-        if len(bars) < _TX_BATCH or last_date.isoformat() >= end:
+        if last_date.isoformat() >= end:
             break
         cursor = (last_date + dt.timedelta(days=1)).isoformat()
 
@@ -170,6 +174,23 @@ def _fetch_us_kline(ticker: str, adjust: str) -> pd.DataFrame:
     return out
 
 
+def _staleness_note(df: pd.DataFrame, end: str) -> str:
+    """最新一根 K 线距区间末超过 10 个自然日时附加提示（停牌/退市等）。
+
+    行以 "..." 开头：与截断脚注同款，data-cache 解析器跳过该行，
+    不会污染服务端图表缓存数据；Agent 据此如实告知用户而非当作最新数据。
+    """
+    try:
+        last = str(df["日期"].iloc[-1])
+        gap = (dt.date.fromisoformat(end) - dt.date.fromisoformat(last)).days
+        if gap > 10:
+            return (f"\n... (注意：最新数据仅到 {last}，距区间末 {end} 已 {gap} 天，"
+                    f"标的可能停牌或退市)")
+    except Exception:
+        log_debug("[global_kline] staleness note skipped")
+    return ""
+
+
 def _hk_kline_impl(period: str, symbol: str, start_date: str, end_date: str, adjust: str) -> str:
     log_debug(f"[global_kline] HK/{period} symbol='{symbol}'")
     if not symbol:
@@ -193,7 +214,7 @@ def _hk_kline_impl(period: str, symbol: str, start_date: str, end_date: str, adj
         hint = hint or "可用 search_symbol 按名称搜索代码"
         return (f"未找到港股{_PERIOD_CN[period]}行情数据（symbol='{symbol}'，"
                 f"区间 {start}~{end}）。{hint}")
-    return format_kline(df, f"港股{_PERIOD_CN[period]}行情", "港元", f"{code}.HK", name)
+    return format_kline(df, f"港股{_PERIOD_CN[period]}行情", "港元", f"{code}.HK", name) + _staleness_note(df, end)
 
 
 def _us_kline_impl(period: str, symbol: str, start_date: str, end_date: str, adjust: str) -> str:
@@ -236,7 +257,7 @@ def _us_kline_impl(period: str, symbol: str, start_date: str, end_date: str, adj
 
     if df.empty:
         return f"未找到美股行情数据（symbol='{symbol}'，区间 {start}~{end}）"
-    return format_kline(df, f"美股{_PERIOD_CN[period]}行情", "美元", ticker, _lookup_name("US", ticker))
+    return format_kline(df, f"美股{_PERIOD_CN[period]}行情", "美元", ticker, _lookup_name("US", ticker)) + _staleness_note(df, end)
 
 
 def _fetch_us_index_kline(code: str, period: str, start: str, end: str) -> pd.DataFrame:

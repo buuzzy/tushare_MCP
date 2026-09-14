@@ -162,9 +162,8 @@ class TxKlinePaginationTests(unittest.TestCase):
 
         def fake_fetch(tx_code, period, seg_start, seg_end, adjust):
             calls.append((seg_start, seg_end))
-            if seg_end <= "2025-11-22":
-                return [], ""  # 上市前空段
-            return list(real_bars), "牧原股份"
+            # 按段过滤：腾讯尊重请求区间，段外的 bar 不会重复返回
+            return [b for b in real_bars if b[0] >= seg_start], "牧原股份"
 
         with mock.patch.object(quote, "_tx_fetch_once", side_effect=fake_fetch):
             df, name = quote._fetch_tx_kline("hk02714", "daily", "2023-09-14", "2026-09-14", "")
@@ -172,6 +171,27 @@ class TxKlinePaginationTests(unittest.TestCase):
         self.assertEqual(name, "牧原股份")
         self.assertEqual(len(df), 2)
         self.assertGreaterEqual(len(calls), 2)  # 空段后继续扫描而非 break
+
+    def test_continues_past_partial_segment(self):
+        # 回归（hk00700 实测）：800 自然日 ≈ 538 个交易日 < 800 根批量上限，
+        # 旧判据"不足一批即停"使默认 3 年窗口止步首段（数据停在 2025-11-21）
+        from tools.global_market import quote
+
+        days = pd.bdate_range("2024-01-01", "2026-08-31")  # 工作日密度贴近真实
+        series = [[d.strftime("%Y-%m-%d"), "1", "1", "1", "1", "100"] for d in days]
+
+        calls = []
+
+        def fake_fetch(tx_code, period, seg_start, seg_end, adjust):
+            calls.append((seg_start, seg_end))
+            return [b for b in series if seg_start <= b[0] <= seg_end], "腾讯控股"
+
+        with mock.patch.object(quote, "_tx_fetch_once", side_effect=fake_fetch):
+            df, name = quote._fetch_tx_kline("hk00700", "daily", "2024-01-01", "2026-09-14", "")
+
+        self.assertEqual(name, "腾讯控股")
+        self.assertEqual(len(df), len(series))  # 跨段全部拼齐
+        self.assertGreaterEqual(len(calls), 2)
 
     def test_all_empty_returns_empty_df_with_name(self):
         from tools.global_market import quote
@@ -248,6 +268,28 @@ class SearchFallbackTests(unittest.TestCase):
              mock.patch.object(sr, "_suggest_search", side_effect=_boom):
             rows = sr.search_symbols("02714", market="hk")
         self.assertEqual(rows, [{"market": "HK", "code": "02714", "name": "02714"}])
+
+
+class StalenessNoteTests(unittest.TestCase):
+    """最新 K 线距区间末 >10 天时输出须自带事实（防 Agent 当最新数据呈现）。"""
+
+    def _df(self, last_date):
+        return pd.DataFrame({"日期": [last_date], "收盘": [1.0]})
+
+    def test_note_added_when_stale(self):
+        from tools.global_market.quote import _staleness_note
+        note = _staleness_note(self._df("2025-11-21"), "2026-09-14")
+        self.assertTrue(note.startswith("\n..."))  # data-cache 解析器跳过该行
+        self.assertIn("2025-11-21", note)
+        self.assertIn("2026-09-14", note)
+
+    def test_no_note_when_fresh(self):
+        from tools.global_market.quote import _staleness_note
+        self.assertEqual(_staleness_note(self._df("2026-09-12"), "2026-09-14"), "")
+
+    def test_no_note_within_grace(self):
+        from tools.global_market.quote import _staleness_note
+        self.assertEqual(_staleness_note(self._df("2026-09-05"), "2026-09-14"), "")
 
 
 class FormattingTests(unittest.TestCase):
