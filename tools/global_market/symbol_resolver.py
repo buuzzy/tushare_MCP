@@ -309,5 +309,10 @@ def search_symbols(query: str, market: str = "all", limit: int = 10) -> list[dic
                 results.append({"market": "US", "code": q_upper,
                                 "name": _us_name_from_em(q_upper) or q_upper})
         elif market in ("all", "hk") and re.fullmatch(r"\d{1,5}", query):
-            results.append({"market": "HK", "code": query.zfill(5), "name": query.zfill(5)})
+            # 仅短简写透传（suggest 不支持前缀匹配，'700'→'00700' 属代码归一化）。
+            # 完整 5 位代码不透传：suggest 全库未命中即视为不存在——
+            # 盲回显会给无效代码（如 99999）发放"存在证书"，误导 Agent
+            # 查行情失败后自行猜测替换标的（2026-09-15 P2#39 实测）
+            if len(query) < 5:
+                results.append({"market": "HK", "code": query.zfill(5), "name": query.zfill(5)})
     return results[:limit]

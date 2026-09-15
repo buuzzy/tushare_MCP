@@ -154,7 +154,9 @@ def register_announcement_tools(mcp) -> None:
             log_debug(f"[global] search_symbol failed: {e}")
             return "股票代码表暂时不可用（服务繁忙），请稍后再试；港股可直接用 5 位数字代码，美股用 ticker"
         if not rows:
-            return (f"未找到匹配 '{query}' 的股票，请确认代码或名称是否正确"
+            num_hint = ("；纯数字代码未匹配到有效证券——可能不存在或已退市，"
+                        "建议与用户确认代码是否笔误" if query.strip().isdigit() else "")
+            return (f"未找到匹配 '{query}' 的股票{num_hint}，请确认代码或名称是否正确"
                     "（港股为 5 位数字如 00700，美股为 ticker 如 AAPL）")
         return format_generic_rows(
             "股票代码搜索",

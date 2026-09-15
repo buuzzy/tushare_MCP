@@ -258,7 +258,8 @@ class SearchFallbackTests(unittest.TestCase):
             rows = sr.search_symbols("腾讯", market="hk")
         self.assertEqual(rows[0]["name"], "腾讯控股")
 
-    def test_suggest_failure_falls_back_to_passthrough(self):
+    def test_suggest_failure_no_echo_for_full_code(self):
+        # 完整 5 位代码在 suggest/活跃表均未命中时不得盲回显（99999 假阳性回归）
         from tools.global_market import symbol_resolver as sr
 
         def _boom(*a, **k):
@@ -267,8 +268,21 @@ class SearchFallbackTests(unittest.TestCase):
         with mock.patch.object(sr, "_load_hk_list", return_value=[]), \
              mock.patch.object(sr, "_load_us_list", return_value=[]), \
              mock.patch.object(sr, "_suggest_search", side_effect=_boom):
-            rows = sr.search_symbols("02714", market="hk")
-        self.assertEqual(rows, [{"market": "HK", "code": "02714", "name": "02714"}])
+            rows = sr.search_symbols("99999", market="hk")
+        self.assertEqual(rows, [])
+
+    def test_short_code_passthrough_still_resolves(self):
+        # 短简写透传保留（suggest 不支持前缀匹配）：'700' → '00700' 归一化
+        from tools.global_market import symbol_resolver as sr
+
+        def _boom(*a, **k):
+            raise RuntimeError("down")
+
+        with mock.patch.object(sr, "_load_hk_list", return_value=[]), \
+             mock.patch.object(sr, "_load_us_list", return_value=[]), \
+             mock.patch.object(sr, "_suggest_search", side_effect=_boom):
+            rows = sr.search_symbols("700", market="hk")
+        self.assertEqual(rows, [{"market": "HK", "code": "00700", "name": "00700"}])
 
 
 class BuybackFormatTests(unittest.TestCase):

@@ -211,7 +211,7 @@ def _hk_kline_impl(period: str, symbol: str, start_date: str, end_date: str, adj
                 hint = "候选：" + "; ".join(f"{r['code']} {r['name']}" for r in rows)
         except Exception:
             pass
-        hint = hint or "可用 search_symbol 按名称搜索代码"
+        hint = hint or "该代码可能不存在或已退市，建议与用户确认代码；也可用 search_symbol 按名称搜索"
         return (f"未找到港股{_PERIOD_CN[period]}行情数据（symbol='{symbol}'，"
                 f"区间 {start}~{end}）。{hint}")
     return format_kline(df, f"港股{_PERIOD_CN[period]}行情", "港元", f"{code}.HK", name) + _staleness_note(df, end)
@@ -239,7 +239,7 @@ def _us_kline_impl(period: str, symbol: str, start_date: str, end_date: str, adj
                 hint = "候选：" + "; ".join(f"{r['code']} {r['name']}" for r in rows)
         except Exception:
             pass
-        hint = hint or "可用 search_symbol 按名称搜索代码"
+        hint = hint or "该代码可能不存在或已退市，建议与用户确认代码；也可用 search_symbol 按名称搜索"
         return f"未找到美股行情数据（symbol='{symbol}'）。{hint}"
 
     df = df[(df["日期"] >= start) & (df["日期"] <= end)]

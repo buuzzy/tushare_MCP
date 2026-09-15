@@ -39,6 +39,10 @@ CASES = [
     # 次新股/中文名搜索回归（活跃表快照不含 02714，靠 suggest 全库兜底）
     ("search_symbol", {"query": "牧原", "market": "hk"}, "02714", 0),
     ("search_symbol", {"query": "苹果", "market": "us"}, "AAPL", 0),
+    # 无效完整代码须诚实拒答（P2#39 回归：99999 曾被盲回显"确认存在"）
+    ("search_symbol", {"query": "99999", "market": "hk"}, "未找到", 0),
+    # 短简写透传保留（suggest 不支持前缀匹配）
+    ("search_symbol", {"query": "700", "market": "hk"}, "00700", 0),
     ("hk_fina_indicator", {"symbol": "00700", "limit": 3}, "ROE", 0),
     ("hk_income", {"symbol": "00700", "limit": 2}, "营业", 0),
     ("hk_balancesheet", {"symbol": "700", "limit": 1}, "报告期", 0),
