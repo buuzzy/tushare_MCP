@@ -59,6 +59,7 @@ class ToolSchemaTests(unittest.TestCase):
             "hk_income", "hk_balancesheet", "hk_cashflow",
             "us_income", "us_balancesheet", "us_cashflow",
             "search_symbol", "us_filings", "hk_announcements",
+            "hk_buyback",
         }
         self.assertEqual(expected, set(tools.keys()))
 
@@ -268,6 +269,29 @@ class SearchFallbackTests(unittest.TestCase):
              mock.patch.object(sr, "_suggest_search", side_effect=_boom):
             rows = sr.search_symbols("02714", market="hk")
         self.assertEqual(rows, [{"market": "HK", "code": "02714", "name": "02714"}])
+
+
+class BuybackFormatTests(unittest.TestCase):
+    def test_format_buyback_rows(self):
+        from tools.global_market.finance import _format_buyback_rows
+        raw = [{
+            "TRADE_DATE": "2026-09-14 00:00:00", "SECUCODE": "00700.HK",
+            "SECURITY_NAME_ABBR": "腾讯控股", "REPO_NUM": 233000,
+            "AVG_PRICE": 430.3954, "REPO_AMT": 100282128.2,
+            "REPO_NUM_PCG": 0.0079, "CURRENCY": "HKD",
+        }, {
+            # 缺金额的行应被剔除
+            "TRADE_DATE": "2026-09-15 00:00:00", "SECUCODE": "00700.HK",
+            "SECURITY_NAME_ABBR": "腾讯控股", "REPO_NUM": 1,
+            "AVG_PRICE": 1.0, "REPO_AMT": None,
+        }]
+        rows = _format_buyback_rows(raw)
+        self.assertEqual(len(rows), 1)
+        r = rows[0]
+        self.assertEqual(r["日期"], "2026-09-14")
+        self.assertEqual(r["回购股数"], "233,000股")
+        self.assertEqual(r["回购金额"], "100,282,128.2")
+        self.assertIn("%", r["占总股本比"])
 
 
 class StalenessNoteTests(unittest.TestCase):
@@ -487,6 +511,17 @@ class NetworkIntegrationTests(unittest.TestCase):
         from tools.global_market.symbol_resolver import _suggest_search
         rows = _suggest_search("牧原", "hk", 10)
         self.assertTrue(any(r["code"] == "02714" and r["name"] == "牧原股份" for r in rows))
+
+    def test_hk_buyback_online(self):
+        # 港股每日回购（datacenter 域）：数据准确性内部一致性——股数×均价≈金额
+        from tools.global_market.finance import _fetch_hk_buyback
+        raw = _fetch_hk_buyback("00700", "2026-06-01", "2026-09-15")
+        self.assertGreaterEqual(len(raw), 5)
+        self.assertEqual(raw[0]["SECURITY_NAME_ABBR"], "腾讯控股")
+        for r in raw:
+            if r["REPO_NUM"] and r["AVG_PRICE"] and r["REPO_AMT"]:
+                expect = r["REPO_NUM"] * r["AVG_PRICE"]
+                self.assertAlmostEqual(expect, r["REPO_AMT"], delta=max(1.0, expect * 0.001))
 
 
 if __name__ == "__main__":

@@ -6,12 +6,17 @@ datacenter 与行情域名（push2his）限流相互独立，财务请求可用�
 
 from __future__ import annotations
 
-import akshare as ak
+import datetime as dt
 
-from tools.global_market.em_client import em_call, TTL_DAILY
+import akshare as ak
+import requests
+
+from tools.global_market.em_client import em_call, TTL_DAILY, TTL_KLINE
 from tools.global_market.global_formatting import (
-    HK_INDICATOR_FIELDS, US_INDICATOR_FIELDS, format_indicator, format_report,
+    HK_INDICATOR_FIELDS, US_INDICATOR_FIELDS, format_generic_rows,
+    format_indicator, format_report,
 )
+from tools.global_market.quote import _normalize_dates
 from tools.global_market.symbol_resolver import normalize_hk
 from utils.logger import log_debug, handle_exception
 
@@ -54,6 +59,60 @@ def _fetch_us_report(ticker: str, report: str, indicator: str):
         lambda: ak.stock_financial_us_report_em(stock=ticker, symbol=report, indicator=indicator),
         cache_key=f"us_rp:{ticker}:{report}:{indicator}",
         ttl_seconds=TTL_DAILY,
+    )
+
+
+# 港股每日回购（数据中心 datacenter 域名组；与披露易"翌日披露報表"逐日对应）
+_BUYBACK_URL = "https://datacenter-web.eastmoney.com/api/data/v1/get"
+
+
+def _format_buyback_rows(raw: list[dict]) -> list[dict]:
+    """原始行 -> 输出行（最新在前，单位进值便于阅读与 data-cache 解析）。"""
+    rows: list[dict] = []
+    for r in raw:
+        num, avg, amt = r.get("REPO_NUM"), r.get("AVG_PRICE"), r.get("REPO_AMT")
+        if num is None or avg is None or amt is None:
+            continue
+        row = {
+            "日期": str(r.get("TRADE_DATE", ""))[:10],
+            "代码": str(r.get("SECUCODE", "")),
+            "名称": str(r.get("SECURITY_NAME_ABBR", "")).strip(),
+            "回购股数": f"{int(num):,}股",
+            "回购均价": f"{float(avg):.4f}",
+            "回购金额": f"{float(amt):,.1f}",
+        }
+        pcg = r.get("REPO_NUM_PCG")
+        if pcg is not None:
+            row["占总股本比"] = f"{pcg}%"
+        rows.append(row)
+    return rows
+
+
+def _fetch_hk_buyback(code: str, start: str, end: str) -> list[dict]:
+    """港股每日回购明细（最新在前，单页 500 条足够覆盖任何常规区间）。"""
+    flt = f'(SECURITY_CODE="{code}")'
+    if start:
+        flt += f"(TRADE_DATE>='{start}')"
+    if end:
+        flt += f"(TRADE_DATE<='{end}')"
+
+    def _do() -> list[dict]:
+        resp = requests.get(
+            _BUYBACK_URL,
+            params={
+                "reportName": "RPT_HK_BUYBACK", "columns": "ALL",
+                "pageSize": "500", "pageNumber": "1",
+                "sortColumns": "TRADE_DATE", "sortTypes": "-1",
+                "filter": flt,
+            },
+            timeout=15,
+        ).json()
+        return (resp.get("result") or {}).get("data") or []
+
+    return em_call(
+        "eastmoney_datacenter", _do,
+        cache_key=f"hk_bb:{code}:{start}:{end}",
+        ttl_seconds=TTL_KLINE,  # T+1 更新，3h 缓存平衡新鲜度与请求量
     )
 
 
@@ -144,3 +203,30 @@ def register_finance_global_tools(mcp) -> None:
     _make_us_report_tool("us_income", _US_REPORTS["us_income"], "综合损益表")
     _make_us_report_tool("us_balancesheet", _US_REPORTS["us_balancesheet"], "资产负债表")
     _make_us_report_tool("us_cashflow", _US_REPORTS["us_cashflow"], "现金流量表")
+
+    @mcp.tool()
+    @handle_exception
+    def hk_buyback(symbol: str, start_date: str = "", end_date: str = "", limit: int = 30) -> str:
+        """
+        获取港股每日回购明细（回购股数/均价/金额，逐交易日一行，港元）。
+        适合"最近回购了多少金额/每天回购情况"类问题；只要公告列表和原文链接请用 hk_announcements。
+
+        参数:
+            symbol: 港股代码（'00700'=腾讯控股，支持 '700' 简写）
+            start_date: 开始日期 (YYYYMMDD，可选，默认近90天)
+            end_date: 结束日期 (YYYYMMDD，可选)
+            limit: 返回最近 N 条（默认 30，最新在前）
+        """
+        log_debug(f"[global_finance] hk_buyback symbol='{symbol}' {start_date}~{end_date}")
+        code = normalize_hk(symbol or "")
+        if not code:
+            return f"错误：无法识别的港股代码 '{symbol}'（示例：00700 或 700）"
+        default_start = (dt.date.today() - dt.timedelta(days=90)).strftime("%Y%m%d")
+        start, end, _ = _normalize_dates(start_date or default_start, end_date)
+        raw = _fetch_hk_buyback(code, start, end)
+        if not raw:
+            return (f"未找到港股回购数据（{symbol}，区间 {start}~{end}）。"
+                    "该区间可能无回购记录；可用 hk_announcements 查公告原文")
+        rows = _format_buyback_rows(raw)[:max(1, limit)]
+        name = rows[0]["名称"] or code if rows else code
+        return format_generic_rows(f"港股回购（{code} {name}，港元）", rows)

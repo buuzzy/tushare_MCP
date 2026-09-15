@@ -49,6 +49,8 @@ CASES = [
     ("us_cashflow", {"symbol": "AAPL", "limit": 1}, "报告期", 0),
     ("us_filings", {"symbol": "AAPL", "form": "10-K", "limit": 3}, "10-K", 0),
     ("hk_announcements", {"symbol": "00700", "limit": 5}, "公告", 0),
+    # 港股每日回购（datacenter 域）：验证海外可达 + 数据量（腾讯几乎逐日回购）
+    ("hk_buyback", {"symbol": "00700"}, "腾讯控股", 8),
     ("hk_daily", {"symbol": "00700", "start_date": "20260901"}, "代码:00700.HK", 8),
     # 分页回归（P1#7 实测）：默认 3 年窗口必须拉全——旧判据在 ~538 根（首段）止步，
     # 数据错误地停在 2025-11-21；3 个港股交易日年 ≈ 745 根
@@ -116,8 +118,8 @@ async def verify(url: str) -> int:
                         failed += 1
                     elif min_bars:
                         import re as _re
-                        m = _re.search(r"\(Total: (\d+)\)", text)
-                        total = int(m.group(1)) if m else 0
+                        m = _re.search(r"\((?:Total: (\d+)|共 (\d+) 条)\)", text)
+                        total = int(m.group(1) or m.group(2)) if m else 0
                         if total < min_bars:
                             print(f"  FAIL  {tool}{args}: 仅 {total} 根 (< {min_bars}): {text[:100]}")
                             failed += 1
