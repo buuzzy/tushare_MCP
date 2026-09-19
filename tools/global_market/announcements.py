@@ -5,7 +5,6 @@
 - hk_announcements：港交所披露易官方接口（公告列表）
 """
 
-from __future__ import annotations
 
 import datetime as dt
 import json

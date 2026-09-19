@@ -4,7 +4,6 @@
 datacenter 与行情域名（push2his）限流相互独立，财务请求可用更高速率。
 """
 
-from __future__ import annotations
 
 import datetime as dt
 

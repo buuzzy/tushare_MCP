@@ -6,9 +6,13 @@
 东财 datacenter（不受影响）。所有请求经 em_client 限频。
 """
 
-from __future__ import annotations
+# 注意：本模块注册的工具函数带参数注解，mcp 1.7.1 的 Tool.from_function 会对
+# 注解做 issubclass 判断；`from __future__ import annotations` 会把注解字符串化，
+# 在部分 Python 版本（3.13 实测）导致注册直接 TypeError。本仓库 Python>=3.11，
+# PEP 585/604 注解可原生求值，因此**禁止在此模块加 future annotations import**。
 
 import datetime as dt
+import time
 
 import akshare as ak
 import pandas as pd
@@ -20,7 +24,7 @@ from tools.global_market.symbol_resolver import (
     _load_hk_list, _load_us_list, normalize_hk, resolve_index,
     search_symbols,
 )
-from utils.logger import log_debug, handle_exception
+from utils.logger import log_debug, log_info, handle_exception
 
 _PERIOD_CN = {"daily": "日线", "weekly": "周线", "monthly": "月线"}
 _PERIOD_TX = {"daily": "day", "weekly": "week", "monthly": "month"}
@@ -31,6 +35,11 @@ _TX_URL = "https://ifzq.gtimg.cn/appstock/app/fqkline/get"
 _TX_BATCH = 800        # 单次请求上限（实测 800 可用）
 _TX_SEGMENT_DAYS = 800  # 每段自然日跨度（≈538 个交易日，必定低于单次 800 根上限——
                         # 因此绝不能以"返回不足一批"判定区间结束，见 _fetch_tx_kline）
+# 连接超时单独收紧：跨境链路（Railway -> 境内行情源）的黑洞式丢包表现为
+# 连接阶段挂死，15s 的连接超时纯属浪费；读超时保持 15s 不变。
+_TX_TIMEOUT = (5.0, 15.0)
+# 单次上游请求耗时超过该阈值就告警一行，用于线上判定跨境链路是否变慢
+_TX_SLOW_SEC = float(5.0)
 
 
 def _lookup_name(market: str, code: str) -> str:
@@ -68,7 +77,20 @@ def _tx_fetch_once(tx_code: str, period: str, seg_start: str, seg_end: str, adju
     fq = adjust if adjust in ("qfq", "hfq") else ""
 
     def _do():
-        r = requests.get(_TX_URL, params={"param": _tx_param(tx_code, period, seg_start, seg_end, fq)}, timeout=15)
+        started = time.monotonic()
+        r = requests.get(
+            _TX_URL,
+            params={"param": _tx_param(tx_code, period, seg_start, seg_end, fq)},
+            timeout=_TX_TIMEOUT,
+        )
+        elapsed = time.monotonic() - started
+        if elapsed >= _TX_SLOW_SEC:
+            # 仅慢响应时输出一行（正常路径 <1s 不产生日志），
+            # 用于线上判定"慢"到底慢在跨境链路还是数据加工
+            log_info(
+                f"[global_kline] 上游慢响应 host=ifzq.gtimg.cn 用时 {elapsed:.1f}s "
+                f"（阈值 {_TX_SLOW_SEC:.0f}s）status={r.status_code} code={tx_code} {period}"
+            )
         if (r.json().get("data") or {}).get(tx_code) is None:
             log_debug(f"[global_kline] tencent suspicious response: url={r.url} "
                       f"status={r.status_code} body={r.text[:120]}")

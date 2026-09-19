@@ -1,14 +1,18 @@
 import sys
+import time
 import argparse
 import traceback
 from mcp.server.fastmcp import FastMCP
-from utils.logger import log_debug
+from utils.logger import log_debug, log_info, logger_stats
 from utils.token_manager import (
     set_data_token, get_data_token,
     set_corpus_token, get_corpus_token,
 )
+from utils.async_tools import make_tools_nonblocking, tool_runtime_stats
 from tools import register_all_tools
 import tinyshare as ts  # minishare 数据 SDK（pip 包名仍为 tinyshare）
+
+_STARTED_AT = time.time()
 
 
 # ---------------------------------------------------------------------------
@@ -123,12 +127,34 @@ def register_tool_aliases(mcp: FastMCP):
         tm.add_tool(real_tool.fn, name=alias, description=real_tool.description)
         log_debug(f"Registered alias '{alias}' -> '{real_name}'")
 
+def register_health_route(mcp: FastMCP) -> None:
+    """注册 `/health`：进程存活 + 运行态指标。
+
+    这是**事件循环是否被阻塞**的外部探针：若同步工具把事件循环卡住，本端点
+    会和其他路径一起超时。Railway 健康检查与线上复验都以它为准。
+    """
+    from starlette.requests import Request
+    from starlette.responses import JSONResponse
+
+    @mcp.custom_route("/health", methods=["GET"])
+    async def health(_: Request) -> JSONResponse:
+        return JSONResponse({
+            "status": "ok",
+            "service": "minishare-mcp",
+            "uptime_s": round(time.time() - _STARTED_AT, 1),
+            "tools": len(getattr(mcp._tool_manager, "_tools", {})),
+            **tool_runtime_stats(),
+            **logger_stats(),
+        })
+
+
 def create_mcp_server(port: int = 8000) -> FastMCP:
     mcp = FastMCP(
         "Minishare Data Service",
         host="0.0.0.0",
         port=port,
     )
+    register_health_route(mcp)
     log_debug(f"FastMCP instance created on port {port}.")
     return mcp
 
@@ -155,6 +181,11 @@ if __name__ == "__main__":
 
     # Register aliases for tool names that models commonly hallucinate
     register_tool_aliases(mcp)
+
+    # 关键：把同步工具改走工作线程 + 加单次调用硬时限。
+    # 必须在全部工具与别名注册完成之后执行（FastMCP 会在事件循环里直接同步
+    # 调用非协程工具，一个慢请求即可拖死整个 SSE 服务）。
+    make_tools_nonblocking(mcp)
 
     if args.stdio:
         print("Starting in stdio mode...", file=sys.stderr, flush=True)
