@@ -4,6 +4,15 @@ akshare 本身无限频逻辑（个人研究库），而东财对高频 IP 会�
 2026-09-13 实测：push2his 行情域名短时 ~15-25 次请求后 TCP 断连（HTTP 000），
 数字子域名（33.push2his 等）不绕过，恢复为分钟级；datacenter 财务域名独立
 不受影响。因此所有港美股外部请求（akshare 调用与手写 HTTP）都必须经过本模块。
+
+并发模型（2026-09-19 修订）：限频等待与缓存读写使用**互相独立**的锁。
+旧实现让所有域名组共用一把全局 Condition，缓存读写也挂在同一把锁上：
+因 Condition.wait 会释放锁，多组并发并不会严格串行，但每次唤醒都要争抢
+同一把锁（线程越多抖动越大），缓存热路径也被限频轮询牵连。实测两组各抽
+3 个令牌（rate=2/s）总耗时由 1.66s 降至 1.51s（更接近理论值 1.5s）。
+
+此外，缓存命中不再写日志——它是正常高频路径，每次命中打日志会刷爆
+stderr，触发 Railway 日志限流后同步写阻塞线程，进而拖死服务。
 """
 
 from __future__ import annotations
@@ -61,12 +70,16 @@ class RateLimitedError(RuntimeError):
 
 
 class _GroupState:
+    """单个域名组的令牌桶状态，自带独立条件变量。"""
+
     def __init__(self, rate: float, burst: int) -> None:
         self.rate = rate
         self.tokens = float(burst)
         self.last_refill = time.monotonic()
         self.consecutive_failures = 0
         self.open_until = 0.0
+        # 每组独立锁：避免多组并发等待令牌时在唤醒瞬间争抢同一把全局锁
+        self.cond = threading.Condition()
 
     def refill(self) -> None:
         now = time.monotonic()
@@ -79,14 +92,14 @@ class _GroupState:
 class _EMClient:
     def __init__(self) -> None:
         self._groups = {name: _GroupState(*cfg) for name, cfg in _GROUP_RATES.items()}
-        self._cond = threading.Condition()
+        self._cache_lock = threading.Lock()
         self._cache: "OrderedDict[str, tuple[float, Any]]" = OrderedDict()
 
     # -- 限频与熔断 ----------------------------------------------------------
 
     def _acquire(self, group: str) -> None:
-        with self._cond:
-            state = self._groups[group]
+        state = self._groups[group]
+        with state.cond:
             while True:
                 state.refill()
                 now = time.monotonic()
@@ -99,23 +112,32 @@ class _EMClient:
                 if state.tokens >= 1.0:
                     state.tokens -= 1.0
                     return
-                # 等待一个令牌周期再试（等待期间释放锁）
-                self._cond.wait(timeout=1.0 / state.rate + 0.05)
+                # 只等"攒够 1 个令牌"所需的时间，避免固定 1s 空转；
+                # 上限 1s 以便及时看到熔断状态变化。
+                need = 1.0 - state.tokens
+                wait = need / state.rate if state.rate > 0 else 1.0
+                state.cond.wait(timeout=min(max(wait, 0.05), 1.0))
 
     def _record_success(self, group: str) -> None:
-        with self._cond:
-            self._groups[group].consecutive_failures = 0
+        state = self._groups[group]
+        with state.cond:
+            state.consecutive_failures = 0
 
     def _record_failure(self, group: str) -> None:
-        with self._cond:
-            state = self._groups[group]
+        state = self._groups[group]
+        opened = False
+        with state.cond:
             state.consecutive_failures += 1
             if state.consecutive_failures >= _CIRCUIT_FAILS:
                 state.open_until = time.monotonic() + _CIRCUIT_COOLDOWN
                 state.consecutive_failures = 0
-                log_debug(
-                    f"[em_client] group '{group}' circuit OPEN for {_CIRCUIT_COOLDOWN}s"
-                )
+                opened = True
+                # 唤醒正在等令牌的线程，让它们立刻拿到熔断提示而不是继续空转
+                state.cond.notify_all()
+        if opened:
+            log_debug(
+                f"[em_client] group '{group}' circuit OPEN for {_CIRCUIT_COOLDOWN}s"
+            )
 
     # -- 统一入口 ------------------------------------------------------------
 
@@ -144,7 +166,9 @@ class _EMClient:
         if cache_key and ttl_seconds > 0:
             cached = self._peek_cache(cache_key, ttl_seconds)
             if cached is not None:
-                log_debug(f"[em_client] cache HIT '{cache_key}'")
+                # 缓存命中是高频正常路径，刻意不写日志：
+                # 每次命中都打日志会刷爆 stderr，触发 Railway 日志限流后
+                # 同步写阻塞线程，最终拖死服务。
                 return cached
 
         last_error: BaseException = RuntimeError("unreachable")
@@ -168,7 +192,7 @@ class _EMClient:
         raise last_error
 
     def _peek_cache(self, key: str, ttl: float) -> Optional[Any]:
-        with self._cond:
+        with self._cache_lock:
             entry = self._cache.get(key)
             if entry is None:
                 return None
@@ -180,7 +204,7 @@ class _EMClient:
             return _copy_value(value)
 
     def _store_cache(self, key: str, value: Any) -> None:
-        with self._cond:
+        with self._cache_lock:
             self._cache[key] = (time.time(), _copy_value(value))
             self._cache.move_to_end(key)
             while len(self._cache) > _CACHE_MAX:

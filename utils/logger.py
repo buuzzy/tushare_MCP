@@ -1,15 +1,20 @@
+import os
 import sys
 import logging
 import functools
 import traceback
 
+# 日志级别由环境变量 LOG_LEVEL 控制（默认 INFO）。
+# 排查线上问题时设 LOG_LEVEL=DEBUG 打开诊断日志，日常保持默认以免刷屏。
+_LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+
 # Logger for debugging
 logger = logging.getLogger("minishare_mcp")
-logger.setLevel(logging.INFO)
+logger.setLevel(_LOG_LEVEL)
 
 # Create logging handler
 handler = logging.StreamHandler(sys.stderr)
-handler.setLevel(logging.INFO)
+handler.setLevel(_LOG_LEVEL)
 
 # Create logging formatter
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -20,8 +25,18 @@ if not logger.handlers:
     logger.addHandler(handler)
 
 def log_debug(message: str):
-    """Unified logging function"""
-    logger.info(message)
+    """诊断日志：默认静默，仅 LOG_LEVEL=DEBUG 时输出。
+
+    2026-09-19 线上事故：本函数原先直接调用 logger.info，而 em_client 的
+    缓存命中、K 线分段、限频重试等**高频路径**都走它（单次 hk_daily 可产生
+    数十至上百行），把 stderr 刷爆。Railway 对日志做限流（Messages
+    dropped:400）后，同步写 stderr 阻塞工作线程，事件循环被拖死，SSE 全路径
+    无响应 —— 前端表现为永久"执行中"。
+
+    因此这里必须是 DEBUG 级：**不得再改回 logger.info**。
+    需要这些信息时，用环境变量 LOG_LEVEL=DEBUG 临时打开。
+    """
+    logger.debug(message)
 
 def handle_exception(func):
     """Unified exception handler decorator"""
@@ -47,6 +62,7 @@ def handle_exception(func):
             # isError=true. Returning a string here would hide upstream failures.
             raise last_error
     return wrapper
+
 
 # Errors that are likely transient and worth retrying
 _TRANSIENT_EXCEPTIONS = (

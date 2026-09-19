@@ -26,6 +26,11 @@ COPY . .
 
 # 设置环境变量，让Python日志直接输出，便于调试
 ENV PYTHONUNBUFFERED=1
+# 日志级别：默认 INFO，诊断级 log_debug 保持静默。
+# 切勿改为 DEBUG —— 高频路径（缓存命中/K线分段）会把 stderr 刷爆，
+# 触发平台日志限流后同步写阻塞线程，拖死整个 SSE 服务（2026-09-19 事故）。
+# 需要排查时改这个环境变量即可。
+ENV LOG_LEVEL=INFO
 # 设置Cloud Run期望的端口环境变量
 ENV PORT 8080
 
