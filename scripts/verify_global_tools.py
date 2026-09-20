@@ -124,7 +124,7 @@ async def verify(url: str, url_is_remote: bool = False) -> int:
             # 本地 stub server 只注册 global 类工具：过滤掉其他类别的用例
             cases = CASES if url_is_remote else [c for c in CASES if _case_category(c) == "global"]
             print(f"cases to run: {len(cases)}/{len(CASES)}")
-            for tool, args, expect, min_bars in cases:
+            for tool, args, expect, min_bars, *_rest in cases:
                 if tool not in names:
                     print(f"  SKIP  {tool}: not registered")
                     failed += 1
