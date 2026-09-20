@@ -466,6 +466,15 @@ class AShareFormatTests(unittest.TestCase):
         output = format_quote_data(df, "daily", ["000001.SZ"], adjust="qfq")
         self.assertIn("区间最高 high=12（20260109）", output)
 
+    def test_format_does_not_claim_qfq_when_attrs_say_unadjusted(self):
+        # 纯指数调用/因子降级时 attrs["adjust"]=""：标题不得虚标前复权
+        df = pd.DataFrame([
+            {"ts_code": "000300.SH", "trade_date": "20260901", "close": 4600},
+        ])
+        df.attrs["adjust"] = ""
+        output = format_quote_data(df, "daily", ["000300.SH"], adjust="qfq")
+        self.assertNotIn("前复权", output)
+
 
 if __name__ == "__main__":
     unittest.main()

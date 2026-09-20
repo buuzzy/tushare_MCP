@@ -362,8 +362,12 @@ def format_quote_data(
         "monthly": ("月线", "月"),
     }
     period_name, value_prefix = labels[period]
-    # 口径声明以实际生效的复权为准（fetch 阶段因子不可用会降级，attrs 不撒谎）
-    effective = str(df.attrs.get("adjust", "")) or normalize_adjust(adjust)
+    # 口径声明以实际生效的复权为准（fetch 阶段 attrs 必记录实际口径，
+    # 因子不可用降级不复权时 attrs=""，不虚标前复权；纯指数调用同样不声明）
+    if "adjust" in df.attrs:
+        effective = str(df.attrs["adjust"])
+    else:
+        effective = normalize_adjust(adjust)
     adjust_suffix = {"qfq": "，前复权", "hfq": "，后复权"}.get(effective, "")
     display_df = _select_display_rows(df, requested_codes, per_code_limit=50)
     requested_code_list = list(requested_codes)

@@ -172,7 +172,7 @@ async def verify(url: str, url_is_remote: bool = False) -> int:
                         failed += 1
                     elif min_bars:
                         import re as _re
-                        m = _re.search(r"\((?:Total: (\d+)|共 (\d+) 条)\)", text)
+                        m = _re.search(r"\(Total: (\d+)[^)]*\)", text) or _re.search(r"共 (\d+) 条", text)
                         total = int(m.group(1) or m.group(2)) if m else 0
                         if total < min_bars:
                             print(f"  FAIL  {tool}{args}: 仅 {total} 根 (< {min_bars}): {text[:100]}")
