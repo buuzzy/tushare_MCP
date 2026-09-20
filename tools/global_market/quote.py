@@ -184,8 +184,9 @@ def _fetch_tx_kline(tx_code: str, period: str, start: str, end: str, adjust: str
 def _fetch_us_kline(ticker: str, adjust: str) -> pd.DataFrame:
     """美股 K 线（新浪源全历史，本地过滤日期）。
 
-    腾讯 fqkline 对美股实测仅返回 1 根（无论日期区间/复权参数），不可用，
-    故美股走新浪全历史（一次拉取 + 缓存，akshare 解码）。
+    腾讯 fqkline 美股长窗口（>650 根）实测仅返回 1 根，不可用；短窗口
+    （≤650 根，code=usNVDA.OQ 式）2026-09-20 实测可用（86 根），可作备用源
+    （尚未接入）。故美股主源走新浪全历史（一次拉取 + 缓存，akshare 解码）。
     返回中文列 DataFrame。
     """
     fq = adjust if adjust in ("qfq", "hfq") else ""
