@@ -55,26 +55,28 @@ CASES = [
     ("hk_announcements", {"symbol": "00700", "limit": 5}, "公告", 0),
     # 港股每日回购（datacenter 域）：验证海外可达 + 数据量（腾讯几乎逐日回购）
     ("hk_buyback", {"symbol": "00700"}, "腾讯控股", 8),
-    ("hk_daily", {"symbol": "00700", "start_date": "20260901"}, "代码:00700.HK", 8),
-    # 分页回归（P1#7 实测）：默认 3 年窗口必须拉全——旧判据在 ~538 根（首段）止步，
-    # 数据错误地停在 2025-11-21；3 个港股交易日年 ≈ 745 根
-    ("hk_daily", {"symbol": "00700"}, "名称:腾讯控股", 700),
-    # 20 年多段拼接（验收 #14）：~4900 根，验证跨 ~10 段无丢段
-    ("hk_daily", {"symbol": "00700", "start_date": "20060914"}, "名称:腾讯控股", 4500),
+    # K 线类：紧凑格式（9f27eee 起）代码/名称只在标题行声明一次
+    ("hk_daily", {"symbol": "00700", "start_date": "20260901"}, "| 00700.HK 腾讯控股 |", 8),
+    # 分页回归（P1#7 实测）：默认 3 年窗口必须拉全——旧判据在 ~538 根（首段）止步；
+    # 737 根日线自动聚合为 ~157 根周线（81c9b98 起），Total 以周线数校验
+    ("hk_daily", {"symbol": "00700"}, "| 00700.HK 腾讯控股 |", 150),
+    # 20 年多段拼接（验收 #14）：~4900 根日线 → ~240 根月线，验证跨 ~10 段无丢段
+    ("hk_daily", {"symbol": "00700", "start_date": "20060914"}, "| 00700.HK 腾讯控股 |", 200),
     # 次新股回归：默认近 3 年窗口首段在上市前（2026-02-06 上市），须跳过空段
-    ("hk_daily", {"symbol": "02714"}, "名称:牧原股份", 100),
-    # 截断脚注须自述完整区间（防 Agent 把首行可见日期误当数据起点/误推上市时间）
-    ("hk_daily", {"symbol": "02714", "start_date": "20250601"}, "数据区间 2026-02-06", 100),
+    ("hk_daily", {"symbol": "02714"}, "| 02714.HK 牧原股份 |", 100),
+    # 聚合极值发生日（f456abb）：3 年窗口聚周线必须携带极值的具体交易日
+    ("hk_daily", {"symbol": "00700", "start_date": "20230920", "end_date": "20260920"},
+     "high_date:2025-10-02", 150),
     # 上市前区间无数据：错误消息应带候选 hint（suggest 回填中文名）
     ("hk_daily", {"symbol": "02714", "start_date": "20230101", "end_date": "20240101"}, "牧原股份", 0),
-    ("hk_weekly", {"symbol": "00700", "start_date": "20260801"}, "代码:00700.HK", 4),
-    ("hk_monthly", {"symbol": "00700", "start_date": "20260601"}, "代码:00700.HK", 3),
-    ("us_daily", {"symbol": "AAPL", "start_date": "20260901"}, "代码:AAPL", 7),
-    ("us_daily", {"symbol": "SNDK", "start_date": "20260827"}, "代码:SNDK", 8),
-    ("us_weekly", {"symbol": "AAPL", "start_date": "20260801"}, "代码:AAPL", 4),
-    ("global_index_daily", {"symbol": "HSI", "start_date": "20260901"}, "代码:hkHSI", 8),
-    ("global_index_daily", {"symbol": "SPX", "start_date": "20260901"}, "代码:.INX", 5),
-    ("global_index_daily", {"symbol": "DJIA", "start_date": "20260901"}, "代码:.DJI", 5),
+    ("hk_weekly", {"symbol": "00700", "start_date": "20260801"}, "| 00700.HK 腾讯控股 |", 4),
+    ("hk_monthly", {"symbol": "00700", "start_date": "20260601"}, "| 00700.HK 腾讯控股 |", 3),
+    ("us_daily", {"symbol": "AAPL", "start_date": "20260901"}, "| AAPL ", 7),
+    ("us_daily", {"symbol": "SNDK", "start_date": "20260827"}, "| SNDK ", 8),
+    ("us_weekly", {"symbol": "AAPL", "start_date": "20260801"}, "| AAPL ", 4),
+    ("global_index_daily", {"symbol": "HSI", "start_date": "20260901"}, "hkHSI 恒生指数", 8),
+    ("global_index_daily", {"symbol": "SPX", "start_date": "20260901"}, ".INX 标普500指数", 5),
+    ("global_index_daily", {"symbol": "DJIA", "start_date": "20260901"}, ".DJI 道琼斯工业指数", 5),
 ]
 
 
