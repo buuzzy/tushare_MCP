@@ -33,8 +33,10 @@ _TX_URL = "https://ifzq.gtimg.cn/appstock/app/fqkline/get"
 # 注：kline/get（不复权端点）实测已废弃（任何 param 均返回 code=11）；
 # 不复权统一走 fqkline + 空 fq 段（尾逗号），实测 800 bars 正常。
 _TX_BATCH = 800        # 单次请求上限（实测 800 可用）
-_TX_SEGMENT_DAYS = 800  # 每段自然日跨度（≈538 个交易日，必定低于单次 800 根上限——
-                        # 因此绝不能以"返回不足一批"判定区间结束，见 _fetch_tx_kline）
+# 每段自然日跨度（≈538 个交易日，必定低于单次 800 根上限——
+# 因此绝不能以"返回不足一批"判定区间结束，见 _fetch_tx_kline）
+_TX_SEGMENT_DAYS = 800
+_TX_SEGMENT_GAP_SEC = 1.0  # 腾讯境外反爬：分段请求之间的最小间隔（秒）
 # 连接超时单独收紧：跨境链路（Railway -> 境内行情源）的黑洞式丢包表现为
 # 连接阶段挂死，15s 的连接超时纯属浪费；读超时保持 15s 不变。
 _TX_TIMEOUT = (5.0, 15.0)
@@ -130,7 +132,14 @@ def _fetch_tx_kline(tx_code: str, period: str, start: str, end: str, adjust: str
     name = ""
     seg_days = _TX_SEGMENT_DAYS * (5 if period == "weekly" else 22 if period == "monthly" else 1)
     cursor = start
+    _seg_seq = 0
     while cursor <= end:
+        # 腾讯对境外 IP 的反爬：同一来源毫秒级连发的第 2 段请求会被挂死
+        # （2026-09-20 新加坡节点实测：单段正常 ~1s，连续两段第二段永久读超时）。
+        # 段与段之间强制留出间隔。
+        _seg_seq += 1
+        if _seg_seq > 1:
+            time.sleep(_TX_SEGMENT_GAP_SEC)
         seg_end_dt = dt.datetime.strptime(cursor, "%Y-%m-%d").date() + dt.timedelta(days=seg_days)
         seg_end = min(seg_end_dt.isoformat(), end)
         bars, seg_name = _tx_fetch_once(tx_code, period, cursor, seg_end, adjust)
