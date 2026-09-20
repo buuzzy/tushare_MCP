@@ -1,6 +1,7 @@
 import pandas as pd
 from utils.logger import log_debug, handle_exception
 from utils.token_manager import get_pro_client
+from tools.stats_utils import STATS_PREFIX, extremes_with_dates, fmt_num
 
 def register_daily_basic_tools(mcp):
     @mcp.tool()
@@ -8,7 +9,10 @@ def register_daily_basic_tools(mcp):
     def daily_basic(ts_code: str = '', trade_date: str = '', start_date: str = '', end_date: str = '') -> str:
         """
         获取A股每日重要的基本面指标 (daily_basic)，如PE、PB、换手率等。
-        
+
+        输出附带📊区间统计行（PE(TTM)/PB/总市值的区间最高/最低及发生日、
+        最新值，服务端已对全量数据计算）：直接引用该行，无需自行扫描。
+
         参数:
             ts_code: 股票代码 (e.g., '000001.SZ', 可选)
             trade_date: 交易日期 (YYYYMMDD, 可选)
@@ -62,5 +66,25 @@ def register_daily_basic_tools(mcp):
             
         if len(df) > 50:
             results.append(f"... (共 {len(df)} 条，仅显示前 50 条)")
-            
+
+        # 区间统计：PE/PB/市值的极值扫描是代码该干的活（截断场景下未显示
+        # 行的极值也能统计到），模型直接引用，不再自行扫 50+ 行找数。
+        if not df.empty and "trade_date" in df.columns:
+            stat_parts = []
+            for col, label in (("pe_ttm", "PE(TTM)"), ("pb", "PB"), ("total_mv", "总市值")):
+                ext = extremes_with_dates(df, "trade_date", col)
+                if ext:
+                    stat_parts.append(
+                        f"{label} 最高 {fmt_num(ext[0])}（{ext[1]}）/ 最低 {fmt_num(ext[2])}（{ext[3]}）"
+                    )
+            latest = df.loc[df["trade_date"].idxmax()]
+            latest_parts = []
+            for col, label in (("pe_ttm", "PE(TTM)"), ("pb", "PB"), ("total_mv", "总市值(万元)")):
+                if pd.notna(latest.get(col)):
+                    latest_parts.append(f"{label}={fmt_num(latest[col])}")
+            if latest_parts:
+                stat_parts.append(f"最新 {latest['trade_date']}：" + "、".join(latest_parts))
+            if stat_parts:
+                results.append(f"... {STATS_PREFIX}：" + "；".join(stat_parts))
+
         return "\n".join(results)

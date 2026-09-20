@@ -8,7 +8,11 @@ def register_daily_tools(mcp):
     def daily(ts_code: str = '', trade_date: str = '', start_date: str = '', end_date: str = '') -> str:
         """
         获取A股日线行情数据 (daily)，支持股票、沪深指数与申万行业指数(801xxx.SI)。
-        
+
+        输出附带📊区间统计行（区间最高/最低及发生日、区间涨跌幅、最新收盘，
+        服务端已对全量数据计算）：求区间极值/涨幅直接引用该行，无需自行扫描
+        或分段补查。
+
         参数:
             ts_code: 股票或指数代码，支持逗号分隔 (e.g., '000001.SZ,801080.SI', 可选)
             trade_date: 交易日期 (YYYYMMDD, 可选)

@@ -193,6 +193,43 @@ class QuoteUtilsTests(unittest.TestCase):
 
         self.assertIn("未找到代码:801020.SI", output)
 
+    def test_format_appends_interval_stats_per_code(self):
+        # 多代码：每个代码一条服务端统计行（极值/涨跌幅/最新收盘）
+        rows = []
+        for code, base in (("000001.SZ", 10.0), ("399001.SZ", 3000.0)):
+            for i, day in enumerate(["20260105", "20260106", "20260107"]):
+                rows.append({
+                    "ts_code": code,
+                    "trade_date": day,
+                    "open": base,
+                    "high": base + 1 + i,
+                    "low": base - 1,
+                    "close": base + i,
+                })
+        df = pd.DataFrame(rows)
+
+        output = format_quote_data(df, "daily", ["000001.SZ", "399001.SZ"])
+
+        self.assertIn("📊 区间统计（服务端已计算，直接引用即可，无需自行扫描或补查）[000001.SZ]", output)
+        self.assertIn("区间最高 high=13（20260107）", output)
+        self.assertIn("区间最低 low=9（20260105）", output)
+        self.assertIn("最新 20260107 收 12", output)
+        self.assertIn("[399001.SZ]", output)
+
+    def test_interval_stats_cover_rows_omitted_by_display_limit(self):
+        # 关键回归：极值落在被截断省略的行里，统计行仍必须包含
+        dates = [str(20260101 + index) for index in range(60)]
+        rows = [{"ts_code": "000001.SZ", "trade_date": d, "high": 1, "low": 1, "close": 1} for d in dates]
+        rows[2]["high"] = 999  # 最早 3 号（不在显示的最近 50 条内）
+        rows[-1]["low"] = 0.01
+        df = pd.DataFrame(rows)
+
+        output = format_quote_data(df, "daily", ["000001.SZ"])
+
+        self.assertIn("high=999（20260103）", output)
+        self.assertIn("low=0.01", output)
+        self.assertIn("区间涨跌幅", output)
+
     def test_display_limit_is_per_code(self):
         dates = [str(20260101 + index) for index in range(60)]
         rows = []

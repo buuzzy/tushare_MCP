@@ -4,6 +4,8 @@ from typing import Iterable
 
 import pandas as pd
 
+from tools.stats_utils import STATS_PREFIX, extremes_with_dates, fmt_num
+
 
 def split_ts_codes(ts_code: str) -> list[str]:
     """Split the comma-separated code list commonly produced by LLM agents."""
@@ -146,6 +148,34 @@ def _select_display_rows(df: pd.DataFrame, requested_codes: Iterable[str], per_c
     return selected.drop(columns="__code_order").reset_index(drop=True)
 
 
+def _interval_stats_line(sub: pd.DataFrame, code: str | None) -> str | None:
+    """单个代码区间的服务端统计行（对全量 df 计算，含未显示的行）。"""
+    if sub.empty:
+        return None
+    date_col = "trade_date"
+    parts = []
+    ext = extremes_with_dates(sub, date_col, "high")
+    if ext:
+        parts.append(f"区间最高 high={fmt_num(ext[0])}（{ext[1]}）")
+    ext = extremes_with_dates(sub, date_col, "low")
+    if ext:
+        parts.append(f"区间最低 low={fmt_num(ext[2])}（{ext[3]}）")
+
+    # 区间涨跌幅：最早/最新收盘价由代码计算，避免模型自行除法出错
+    if "close" in sub.columns:
+        closes = sub[[date_col, "close"]].dropna(subset=["close"]).sort_values(date_col)
+        if len(closes) >= 2 and closes["close"].iloc[0]:
+            chg = (closes["close"].iloc[-1] / closes["close"].iloc[0] - 1) * 100
+            sign = "+" if chg >= 0 else ""
+            parts.append(f"区间涨跌幅={sign}{chg:.2f}%")
+            parts.append(f"最新 {closes[date_col].iloc[-1]} 收 {fmt_num(closes['close'].iloc[-1])}")
+
+    if not parts:
+        return None
+    tag = f"[{code}]：" if code else "："
+    return f"... {STATS_PREFIX}{tag}" + "；".join(parts)
+
+
 def format_quote_data(df: pd.DataFrame, period: str, requested_codes: Iterable[str]) -> str:
     labels = {
         "daily": ("日线", ""),
@@ -193,4 +223,21 @@ def format_quote_data(df: pd.DataFrame, period: str, requested_codes: Iterable[s
 
     if len(display_df) < len(df):
         results.append(f"... (共 {len(df)} 条，每个代码仅显示最近 50 条)")
+
+    # 区间统计：极值扫描是代码该干的活（同款事故见 tools/stats_utils.py 注释）。
+    # 对全量 df 计算——截断场景下未显示行的极值也能统计到。
+    if not df.empty and {"high", "low"}.issubset(df.columns):
+        if "ts_code" in df.columns and not df["ts_code"].dropna().empty:
+            code_order = list(dict.fromkeys(
+                list(requested_code_list) + df["ts_code"].dropna().unique().tolist()
+            ))
+            for code in code_order:
+                line = _interval_stats_line(df[df["ts_code"] == code], code)
+                if line:
+                    results.append(line)
+        else:
+            line = _interval_stats_line(df, None)
+            if line:
+                results.append(line)
+
     return "\n".join(results)

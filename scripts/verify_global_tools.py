@@ -5,7 +5,10 @@
     线上:  .venv/bin/python scripts/verify_global_tools.py --url https://minishare-mcp-production.up.railway.app/sse
 
 本地运行说明：若未安装私有 SDK（tinyshare/minishare），脚本生成 sitecustomize
-stub 后以 --category global 启动子进程 server，再经 SSE 逐工具调用。
+stub 后以 --category global 启动子进程 server，再经 SSE 逐工具调用（仅执行
+category="global" 的用例；astock 等其他类别仅线上模式执行）。
+本机若设置了 HTTP_PROXY/HTTPS_PROXY 环境变量，须以 NO_PROXY=127.0.0.1,localhost
+前缀运行，否则 MCP SSE 客户端 POST 会被代理改写导致 404。
 """
 
 import argparse
@@ -77,7 +80,20 @@ CASES = [
     ("global_index_daily", {"symbol": "HSI", "start_date": "20260901"}, "hkHSI 恒生指数", 8),
     ("global_index_daily", {"symbol": "SPX", "start_date": "20260901"}, ".INX 标普500指数", 5),
     ("global_index_daily", {"symbol": "DJIA", "start_date": "20260901"}, ".DJI 道琼斯工业指数", 5),
+    # ---- A股（category="astock"，仅线上模式执行；本地 stub server 只起 global）----
+    # 服务端区间统计行回归（stats_utils）：3 年窗口截断后极值仍可被直接引用
+    ("daily", {"ts_code": "000001.SZ", "start_date": "20230920", "end_date": "20260920"},
+     "📊 区间统计（服务端已计算", 50, "astock"),
+    ("daily_basic", {"ts_code": "000001.SZ", "start_date": "20250901", "end_date": "20260920"},
+     "📊 区间统计（服务端已计算", 0, "astock"),
+    ("moneyflow", {"ts_code": "600519.SH", "start_date": "20260801", "end_date": "20260920"},
+     "📊 区间统计（服务端已计算", 0, "astock"),
+    ("fund_nav", {"ts_code": "001102.OF", "start_date": "20250901", "end_date": "20260920"},
+     "📊 区间统计（服务端已计算", 0, "astock"),
 ]
+
+def _case_category(case) -> str:
+    return case[4] if len(case) > 4 else "global"
 
 
 def start_local_server(port: int) -> subprocess.Popen:
@@ -94,7 +110,7 @@ def start_local_server(port: int) -> subprocess.Popen:
     return proc
 
 
-async def verify(url: str) -> int:
+async def verify(url: str, url_is_remote: bool = False) -> int:
     from mcp import ClientSession
     from mcp.client.sse import sse_client
 
@@ -105,8 +121,10 @@ async def verify(url: str) -> int:
             resp = await session.list_tools()
             listed = resp.tools if hasattr(resp, "tools") else resp[0].tools
             names = {t.name for t in listed}
-            print(f"server tools: {len(names)} registered")
-            for tool, args, expect, min_bars in CASES:
+            # 本地 stub server 只注册 global 类工具：过滤掉其他类别的用例
+            cases = CASES if url_is_remote else [c for c in CASES if _case_category(c) == "global"]
+            print(f"cases to run: {len(cases)}/{len(CASES)}")
+            for tool, args, expect, min_bars in cases:
                 if tool not in names:
                     print(f"  SKIP  {tool}: not registered")
                     failed += 1
@@ -156,7 +174,7 @@ def main() -> int:
         url = f"http://127.0.0.1:{args.port}/sse"
         print(f"local server started: {url}")
     try:
-        return asyncio.run(verify(url))
+        return asyncio.run(verify(url, url_is_remote=bool(args.url)))
     finally:
         if proc:
             proc.terminate()

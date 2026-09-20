@@ -1,6 +1,7 @@
 import pandas as pd
 from utils.logger import log_debug, handle_exception
 from utils.token_manager import get_pro_client
+from tools.stats_utils import STATS_PREFIX, extremes_with_dates, fmt_num
 
 def register_fund_nav_tools(mcp):
     @mcp.tool()
@@ -8,7 +9,10 @@ def register_fund_nav_tools(mcp):
     def fund_nav(ts_code: str = "", nav_date: str = "", market: str = "", start_date: str = "", end_date: str = "", limit: int = None, offset: int = None) -> str:
         """
         获取公募基金净值数据。
-        
+
+        时间序列查询输出附带📊区间统计行（区间最高/最低净值及发生日、最新
+        净值，服务端已计算）：直接引用该行，无需自行扫描。
+
         参数:
             ts_code: TS基金代码 (支持多只基金，逗号分隔)
             nav_date: 净值日期 (YYYYMMDD)
@@ -98,7 +102,30 @@ def register_fund_nav_tools(mcp):
                  result.append(f"... (共 {len(df)} 条，仅显示前 {limit} 条)")
              elif not limit and len(df) > display_cap:
                  result.append(f"... (共 {len(df)} 条，仅显示前 {display_cap} 条)")
-             
+
+        # 区间统计：净值极值由代码计算（截断场景下被省略段的极值也能统计到）。
+        # 仅时间序列场景输出；多基金时按代码分行。统计范围即本次返回的 df。
+        if not is_cross_section:
+            value_col = "adj_nav" if "adj_nav" in df.columns else ("unit_nav" if "unit_nav" in df.columns else None)
+            if value_col and "nav_date" in df.columns:
+                groups = (
+                    [(code, df[df["ts_code"] == code]) for code in df["ts_code"].dropna().unique()]
+                    if "ts_code" in df.columns and not df["ts_code"].dropna().empty
+                    else [("", df)]
+                )
+                for code, sub in groups:
+                    ext = extremes_with_dates(sub, "nav_date", value_col)
+                    if not ext:
+                        continue
+                    latest = sub.loc[sub["nav_date"].idxmax()]
+                    tag = f"[{code}]：" if code else "："
+                    label = "复权净值" if value_col == "adj_nav" else "单位净值"
+                    result.append(
+                        f"... {STATS_PREFIX}{tag}区间最高 {label}={fmt_num(ext[0])}（{ext[1]}）；"
+                        f"区间最低 {label}={fmt_num(ext[2])}（{ext[3]}）；"
+                        f"最新 {latest['nav_date']} {label}={fmt_num(latest[value_col])}"
+                    )
+
         return "\n".join(result)
 
 def format_row(row) -> str:

@@ -1,6 +1,7 @@
 import pandas as pd
 from utils.logger import log_debug, handle_exception
 from utils.token_manager import get_pro_client
+from tools.stats_utils import STATS_PREFIX
 
 def register_moneyflow_tools(mcp):
     @mcp.tool()
@@ -9,6 +10,9 @@ def register_moneyflow_tools(mcp):
                   end_date: str = '', limit: int = None) -> str:
         """
         获取个股资金流向数据（主力、超大单、大单、中单、小单净流入/流出）。
+
+        输出附带📊区间统计行（区间主力净流入合计、最大单日净流入/流出及
+        日期，服务端已计算）：直接引用该行，无需自行加总或扫描。
 
         参数:
             ts_code: 股票代码（如 600519.SH）
@@ -82,5 +86,22 @@ def register_moneyflow_tools(mcp):
                 parts.append(f"小单:{fmt(sm_net)}")
 
             result.append(" | ".join(parts))
+
+        # 区间统计：区间合计/极值由代码计算（模型自行扫 20+ 行加总会出错），
+        # 直接引用即可。统计范围即本返回窗口。
+        if not df.empty and "net_mf_amount" in df.columns:
+            flows = df[["trade_date", "net_mf_amount"]].dropna(subset=["net_mf_amount"])
+            if not flows.empty:
+                total = flows["net_mf_amount"].sum()
+                hi_row = flows.loc[flows["net_mf_amount"].idxmax()]
+                lo_row = flows.loc[flows["net_mf_amount"].idxmin()]
+                total_dir = "净流入" if total >= 0 else "净流出"
+                hi_dir = "净流入" if hi_row["net_mf_amount"] >= 0 else "净流出"
+                lo_dir = "净流入" if lo_row["net_mf_amount"] >= 0 else "净流出"
+                result.append(
+                    f"... {STATS_PREFIX}：区间主力{total_dir}合计 {fmt(total)}；"
+                    f"最大单日{hi_dir} {fmt(hi_row['net_mf_amount'])}（{hi_row['trade_date']}）；"
+                    f"最大单日{lo_dir} {fmt(lo_row['net_mf_amount'])}（{lo_row['trade_date']}）"
+                )
 
         return "\n".join(result)
