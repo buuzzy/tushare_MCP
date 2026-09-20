@@ -413,7 +413,12 @@ def register_quote_tools(mcp) -> None:
     def hk_daily(symbol: str, start_date: str = "", end_date: str = "", adjust: str = "") -> str:
         """
         获取港股日线行情（前复权可选，默认近3年、最早可到 2000 年代）。
-        输出：日期 | 代码 | 名称 | 开盘 | 最高 | 最低 | 收盘 | 涨跌幅 | 成交量(股)。
+        输出：date | open | high | low | close | pct_chg | vol(股) | amount。
+        代码/名称/货币在标题行声明一次。
+
+        注意：返回超过 250 根时仅保留最早 50 根 + 最新 200 根，且标题行下方
+        有置顶省略提示——首尾之间数据被省略，求区间最高/最低/涨跌幅等
+        全区间统计时务必缩小日期范围分段查询，或改用 weekly/monthly。
 
         参数:
             symbol: 港股代码（'00700'=腾讯控股，支持 '700' 简写）
@@ -440,7 +445,12 @@ def register_quote_tools(mcp) -> None:
     def us_daily(symbol: str, start_date: str = "", end_date: str = "", adjust: str = "") -> str:
         """
         获取美股日线行情（前复权可选，默认近3年）。
-        输出：日期 | 代码 | 名称 | 开盘 | 最高 | 最低 | 收盘 | 涨跌幅 | 成交量(股)。
+        输出：date | open | high | low | close | pct_chg | vol(股) | amount。
+        代码/名称/货币在标题行声明一次。
+
+        注意：返回超过 250 根时仅保留最早 50 根 + 最新 200 根，且标题行下方
+        有置顶省略提示——首尾之间数据被省略，求区间最高/最低/涨跌幅等
+        全区间统计时务必缩小日期范围分段查询，或改用 weekly/monthly。
 
         参数:
             symbol: 美股代码（'AAPL'=苹果）

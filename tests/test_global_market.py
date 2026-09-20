@@ -343,19 +343,25 @@ class FormattingTests(unittest.TestCase):
 
     def test_format_kline(self):
         out = format_kline(self._kline_df(), "港股日线行情", "港元", "00700.HK", "腾讯控股")
-        self.assertIn("--- 港股日线行情 (Total: 2) ---", out)
-        self.assertIn("日期:2026-09-11 | 代码:00700.HK | 名称:腾讯控股", out)
-        self.assertIn("收盘:425.6", out)
-        self.assertIn("成交量:15628379股", out)
-        self.assertIn("成交额:6,670,000,000.00港元", out)
+        self.assertIn("--- 港股日线行情 | 00700.HK 腾讯控股 | 单位:港元", out)
+        self.assertIn("(Total: 2) ---", out)
+        # 紧凑行：date/open/high/low/close/pct_chg/vol/amount（代码名称只在标题行）
+        self.assertIn("date:2026-09-11|open:419.4|high:430.8|low:419.4|close:425.6", out)
+        self.assertIn("pct_chg:0.658", out)
+        self.assertIn("vol:15628379", out)
+        self.assertIn("amount:6670000000", out)
+        self.assertEqual(out.count("00700.HK"), 1)  # 行内不重复代码
 
-    def test_format_kline_truncated_footer_states_range(self):
-        # 截断时脚注必须自述完整区间（Agent 会把首行可见日期误当数据起点）
-        dates = pd.date_range("2026-01-01", periods=60, freq="D").strftime("%Y-%m-%d")
-        df = pd.DataFrame({"日期": dates, "收盘": [40.0] * 60, "成交量": [1.0] * 60})
+    def test_format_kline_truncated_notice_states_range(self):
+        # 截断时置顶提示必须自述完整区间，且保留最早+最新两段
+        dates = pd.date_range("2026-01-01", periods=300, freq="D").strftime("%Y-%m-%d")
+        df = pd.DataFrame({"日期": dates, "收盘": [40.0] * 300, "成交量": [1.0] * 300})
         out = format_kline(df, "港股日线行情", "港元", "02714.HK", "牧原股份")
-        self.assertIn("共 60 条，数据区间 2026-01-01 ~ 2026-03-01，仅显示最近 50 条", out)
-        self.assertNotIn("日期:2026-01-01", out)  # 首行被截断，只在脚注出现
+        self.assertIn("共 300 条", out)
+        self.assertIn("完整区间 2026-01-01 ~ 2026-10-27", out)
+        self.assertIn("date:2026-01-01", out)   # 最早段保留
+        self.assertIn("date:2026-10-27", out)   # 最新段保留
+        self.assertIn("中间省略", out)          # 中段有显式省略标记
 
     def test_format_kline_empty(self):
         self.assertEqual(format_kline(pd.DataFrame(), "港股日线行情", "港元", "x", "y"),

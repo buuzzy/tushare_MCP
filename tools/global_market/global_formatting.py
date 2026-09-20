@@ -61,42 +61,72 @@ def _fmt_value(field: str, value) -> str:
     return f"{text}%" if field in _PCT_FIELDS else text
 
 
+# 截断时头部保留的行数（其余配额给尾部：最近数据通常更重要）
+_TRUNCATE_HEAD_N = 50
+
+
 def format_kline(
     df: pd.DataFrame,
     title: str,
     currency: str,
     code_label: str,
     name: str,
-    per_code_limit: int = 50,
+    per_code_limit: int = 250,
 ) -> str:
-    """K 线（akshare 中文列）-> `--- 标题 (Total: N) ---` + 每行一根 Bar。"""
+    """K 线（akshare 中文列）-> `--- 标题 (Total: N) ---` + 每行一根 Bar。
+
+    紧凑行格式（sage data-cache/图表模板均兼容英文别名列）：
+        date:YYYY-MM-DD|open:..|high:..|low:..|close:..|pct_chg:..|vol:..|amount:..
+    代码/名称/货币只在标题行声明一次，行内不重复。
+
+    截断策略：保留最早 _TRUNCATE_HEAD_N 条 + 最新（per_code_limit - head）条，
+    并在标题行下方紧贴一条置顶省略提示（Agent 对开头的注意力远高于末尾脚注，
+    2026-09-20 实测：末尾脚注被无视，模型把尾部 50 根当全区间求最高/最低）。
+    """
     if df is None or df.empty:
         return f"未找到{title}数据"
-    display = df.tail(per_code_limit)
-    lines = [f"--- {title} (Total: {len(df)}) ---"]
-    for _, row in display.iterrows():
-        parts = [f"日期:{row['日期']}", f"代码:{code_label}", f"名称:{name}"]
-        for field, label in (
-            ("开盘", "开盘"), ("最高", "最高"), ("最低", "最低"), ("收盘", "收盘"),
-            ("涨跌额", "涨跌额"), ("涨跌幅", "涨跌幅"),
-        ):
-            if field in row and pd.notna(row[field]):
-                parts.append(f"{label}:{_fmt_value(field, row[field])}")
+    total = len(df)
+    lines = [
+        f"--- {title} | {code_label} {name} | 单位:{currency} | "
+        f"列: date,open,high,low,close,pct_chg,vol(股),amount (Total: {total}) ---"
+    ]
+
+    def _bar_line(row) -> str:
+        parts = [f"date:{row['日期']}"]
+        for src, key in (("开盘", "open"), ("最高", "high"), ("最低", "low"), ("收盘", "close")):
+            if src in row and pd.notna(row[src]):
+                parts.append(f"{key}:{_fmt_value(key, row[src])}")
+        if "涨跌幅" in row and pd.notna(row["涨跌幅"]):
+            # pct_chg：数值不带 %（parseNum 会剥掉单位，省字符）
+            parts.append(f"pct_chg:{_fmt_value('pct_chg', row['涨跌幅'])}")
         if "成交量" in row and pd.notna(row["成交量"]):
             vol = row["成交量"]
-            vol_text = str(int(vol)) if isinstance(vol, float) and vol.is_integer() else _fmt_value("成交量", vol)
-            parts.append(f"成交量:{vol_text}股")
+            vol_text = str(int(vol)) if isinstance(vol, float) and vol.is_integer() else _fmt_value("vol", vol)
+            parts.append(f"vol:{vol_text}")
         if "成交额" in row and pd.notna(row["成交额"]):
-            parts.append(f"成交额:{row['成交额']:,.2f}{currency}" if isinstance(row["成交额"], float)
-                         else f"成交额:{row['成交额']}{currency}")
-        lines.append(" | ".join(parts))
-    if len(display) < len(df):
-        # 截断时必须自述完整区间：Agent 会把首行可见日期误当数据起点，
-        # 并对缺失区间（上市前）自行"推测"上市时间（2026-09-14 实测误报）
+            amt = row["成交额"]
+            amt_text = str(int(amt)) if isinstance(amt, float) and amt.is_integer() else f"{amt:.2f}"
+            parts.append(f"amount:{amt_text}")
+        return "|".join(parts)
+
+    if total <= per_code_limit:
+        for _, row in df.iterrows():
+            lines.append(_bar_line(row))
+    else:
+        head_n = min(_TRUNCATE_HEAD_N, per_code_limit)
+        tail_n = per_code_limit - head_n
+        full_start, full_end = df["日期"].iloc[0], df["日期"].iloc[-1]
+        # 置顶提示：紧跟标题行，Agent 首先看到的就是它
         lines.append(
-            f"... (共 {len(df)} 条，数据区间 {df['日期'].iloc[0]} ~ {display['日期'].iloc[-1]}，"
-            f"仅显示最近 {per_code_limit} 条)"
+            f"... ⚠️ 共 {total} 条，仅显示最早 {head_n} 条 + 最新 {tail_n} 条，"
+            f"完整区间 {full_start} ~ {full_end}，中间有省略；"
+            f"求区间最高/最低/涨跌幅请缩小日期范围分段查询，或改用 weekly/monthly。"
         )
+        for _, row in df.head(head_n).iterrows():
+            lines.append(_bar_line(row))
+        lines.append("... （中间省略）...")
+        for _, row in df.tail(tail_n).iterrows():
+            lines.append(_bar_line(row))
     return "\n".join(lines)
 
 

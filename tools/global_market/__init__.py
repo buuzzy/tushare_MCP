@@ -3,7 +3,6 @@
 from .announcements import register_announcement_tools
 from .finance import register_finance_global_tools
 from .quote import register_quote_tools
-from .source_probe import register_probe_tools
 from utils.logger import log_debug
 
 
@@ -12,5 +11,6 @@ def register_global_market_tools(mcp) -> None:
     register_quote_tools(mcp)
     register_finance_global_tools(mcp)
     register_announcement_tools(mcp)
-    register_probe_tools(mcp)  # 诊断探针：数据体系定稿后移除
+    # source_probe 诊断探针已于 2026-09-20 移除（数据体系定稿，见 commit 046813d 与
+    # docs/data-source-design-sg.md 清单第 8 项；需要时从 git 历史恢复）
     log_debug("Registered global market tools")
