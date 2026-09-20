@@ -155,7 +155,12 @@ def _fetch_tx_kline(tx_code: str, period: str, start: str, end: str, adjust: str
         last_date = dt.datetime.strptime(bars[-1][0], "%Y-%m-%d").date()
         if last_date.isoformat() >= end:
             break
-        cursor = (last_date + dt.timedelta(days=1)).isoformat()
+        # 关键：游标至少要推进过本段边界。腾讯对 end≥今天的无效区间（周末/
+        # 未来日期）会返回 1 根旧K线（如周五收盘那根），last_date 可能落后于
+        # 游标；若仅用 last_date+1 推进，游标原地踏步 → 无限循环（2026-09-20
+        # 实锤："时好时坏"的根因——周末 100% 触发、交易日正常）。段内不可能
+        # 截断（800 自然日 ≈ 538 交易日 < 800 根上限），跳到 seg_end+1 无损。
+        cursor = (max(last_date, seg_end_dt) + dt.timedelta(days=1)).isoformat()
 
     if not all_bars:
         return pd.DataFrame(), name
@@ -222,6 +227,58 @@ def _staleness_note(df: pd.DataFrame, end: str) -> str:
     return ""
 
 
+_EM_HK_KLINE_URL = "https://push2his.eastmoney.com/api/qt/stock/kline/get"
+_EM_FQ = {"": "0", "qfq": "1", "hfq": "2"}
+# 超过该自然日跨度的港股日线走东财单请求（一次拉全历史再本地截取），
+# 避免腾讯多段拼接；窄窗口仍以腾讯为主（实测 0.5s、稳定且省配额）
+_EM_HK_LONG_WINDOW_DAYS = 700
+
+
+def _fetch_em_kline_hk(code: str, start: str, end: str, adjust: str) -> tuple[pd.DataFrame, str]:
+    """港股日线（东财 push2his 单请求全历史，组内强制串行）。
+
+    仅限日线；东财组并发零容忍（实测并发即断连），em_call 已按组串行。
+    返回 (中文列 DataFrame, 证券名称)，失败抛异常由调用方决定降级。
+    """
+    def _do():
+        r = requests.get(
+            _EM_HK_KLINE_URL,
+            params={
+                "secid": f"116.{code}",
+                "fields1": "f1,f2,f3,f4,f5,f6",
+                "fields2": "f51,f52,f53,f54,f55,f56,f57",
+                "klt": "101",  # 日线
+                "fqt": _EM_FQ.get(adjust, "0"),
+                "end": "20500101",
+                "lmt": "1000000",
+            },
+            timeout=(3, 10),
+        )
+        return r.json()
+
+    resp = em_call(
+        "eastmoney_quote",
+        _do,
+        cache_key=f"em_kl:116.{code}:{adjust}",
+        ttl_seconds=TTL_KLINE,
+    )
+    data = resp.get("data") or {}
+    kl = data.get("klines") or []
+    if not kl:
+        return pd.DataFrame(), ""
+    rows = []
+    for line in kl:
+        p = line.split(",")
+        # f51日期,f52开盘,f53收盘,f54最高,f55最低,f56成交量,f57成交额
+        rows.append([p[0], p[1], p[2], p[3], p[4], p[5], p[6]])
+    df = pd.DataFrame(rows, columns=["日期", "开盘", "收盘", "最高", "最低", "成交量", "成交额"])
+    for c in ("开盘", "收盘", "最高", "最低", "成交量", "成交额"):
+        df[c] = pd.to_numeric(df[c], errors="coerce")
+    df = df[(df["日期"] >= start) & (df["日期"] <= end)]
+    name = str(data.get("name") or "").strip()
+    return df, name
+
+
 def _hk_kline_impl(period: str, symbol: str, start_date: str, end_date: str, adjust: str) -> str:
     log_debug(f"[global_kline] HK/{period} symbol='{symbol}'")
     if not symbol:
@@ -231,8 +288,32 @@ def _hk_kline_impl(period: str, symbol: str, start_date: str, end_date: str, adj
         return f"错误：无法识别的港股代码 '{symbol}'（示例：00700 或 700）"
     start, end, _ = _normalize_dates(start_date, end_date)
     adjust = adjust if adjust in ("qfq", "hfq") else ""
-    df, tx_name = _fetch_tx_kline(f"hk{code}", period, start, end, adjust)
-    name = tx_name or _lookup_name("HK", code)
+    span_days = (dt.date.fromisoformat(end) - dt.date.fromisoformat(start)).days
+
+    df, name = pd.DataFrame(), ""
+    if period == "daily" and span_days > _EM_HK_LONG_WINDOW_DAYS:
+        # 长窗口日线：东财单请求为主（免多段拼接），失败降级腾讯分段
+        try:
+            df, em_name = _fetch_em_kline_hk(code, start, end, adjust)
+            name = em_name
+        except Exception as e:
+            log_debug(f"[global_kline] EM 长窗口失败，降级腾讯分段: {type(e).__name__}")
+            df = pd.DataFrame()
+        if df.empty:
+            df, tx_name = _fetch_tx_kline(f"hk{code}", period, start, end, adjust)
+            name = name or tx_name
+    else:
+        # 窄窗口（及周/月线）：腾讯为主，失败降级东财
+        df, tx_name = _fetch_tx_kline(f"hk{code}", period, start, end, adjust)
+        name = tx_name
+        if df.empty and period == "daily":
+            try:
+                df, em_name = _fetch_em_kline_hk(code, start, end, adjust)
+                name = name or em_name
+            except Exception as e:
+                log_debug(f"[global_kline] EM 备源失败: {type(e).__name__}")
+                df = pd.DataFrame()
+    name = name or _lookup_name("HK", code)
     if df.empty:
         hint = ""
         try:

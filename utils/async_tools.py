@@ -39,7 +39,9 @@ from utils.logger import log_info, logger
 # 工作线程上限：工具本身是阻塞 IO，线程数只要够并发隔离即可，不宜过大
 _MAX_WORKERS = int(os.getenv("TOOL_MAX_WORKERS", "16"))
 # 单次工具调用的硬上限（秒）。超时返回可读错误，避免调用方无限等待。
-_DEFAULT_TIMEOUT = float(os.getenv("TOOL_TIMEOUT_SEC", "120"))
+# 55s：MCP 协议层客户端默认 60s 就放弃（-32001），服务端必须在它之前
+# 给出结果或明确错误（2026-09-20 超时错配校准，原 120s 永远跑不过客户端）
+_DEFAULT_TIMEOUT = float(os.getenv("TOOL_TIMEOUT_SEC", "55"))
 # 超过该耗时的调用打一条告警（线上定位跨境链路延迟用）
 _SLOW_CALL_SEC = float(os.getenv("TOOL_SLOW_SEC", "10"))
 

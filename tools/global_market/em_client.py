@@ -28,15 +28,24 @@ import requests
 from utils.logger import log_debug
 
 # 域名组 -> (每秒令牌数, 桶容量突发)
+# 2026-09-20 新加坡节点实测校准：
+#   腾讯 20 连发 0.5s 间隔 + 5 并发全过 → 2/s、突发 5；
+#   新浪 15 连发 0.28s + 5 并发全过 → 3/s、突发 5（三家吞吐最强）；
+#   东财 push2his 并发 5/10 全部断连、连发间歇失败 → 0.25/s 且强制串行。
 _GROUP_RATES: dict[str, tuple[float, int]] = {
-    "tencent_quote": (1.0, 5),        # ifzq.gtimg.cn：港股K线/指数（线上实测稳定）
-    "sina_quote": (1.0, 3),           # finance.sina.com.cn：美股K线（腾讯 fqkline 对美股仅返回1根，实测废弃）
-    "eastmoney_quote": (0.3, 3),      # push2his：备用（东财对海外 IP 动态封禁，勿作主力）
+    "tencent_quote": (2.0, 5),        # ifzq.gtimg.cn：港股K线/指数
+    "sina_quote": (3.0, 5),           # finance.sina.com.cn：美股K线（港股备源同组）
+    "eastmoney_quote": (0.25, 2),     # push2his：单请求全历史，仅限低频串行备源
     "eastmoney_datacenter": (1.0, 3),  # datacenter：F10 财务（海外稳定）
     "eastmoney_list": (1.0, 2),        # push2：代码列表（24h 缓存，量极小）
     "eastmoney_suggest": (1.0, 3),     # searchadapter：全库代码/名称搜索（24h 缓存）
     "sec_edgar": (8.0, 8),             # SEC EDGAR 官方上限 10 req/s，留余量
     "hkex": (1.0, 2),                  # 披露易，保守
+}
+
+# 组级最大并发（缺省不限，仅对实测"并发即断连"的域名组收紧）
+_GROUP_MAX_CONCURRENCY: dict[str, int] = {
+    "eastmoney_quote": 1,  # push2his 实测并发即 RemoteDisconnected
 }
 
 _CIRCUIT_FAILS = 3       # 连续调用级失败 N 次后熔断（内部重试耗尽才算一次）
@@ -72,7 +81,7 @@ class RateLimitedError(RuntimeError):
 class _GroupState:
     """单个域名组的令牌桶状态，自带独立条件变量。"""
 
-    def __init__(self, rate: float, burst: int) -> None:
+    def __init__(self, rate: float, burst: int, max_concurrency: int = 0) -> None:
         self.rate = rate
         self.tokens = float(burst)
         self.last_refill = time.monotonic()
@@ -80,6 +89,8 @@ class _GroupState:
         self.open_until = 0.0
         # 每组独立锁：避免多组并发等待令牌时在唤醒瞬间争抢同一把全局锁
         self.cond = threading.Condition()
+        # 组级并发闸：0 = 不限；实测 push2his 并发即断连，必须串行
+        self.sem = threading.Semaphore(max_concurrency) if max_concurrency > 0 else None
 
     def refill(self) -> None:
         now = time.monotonic()
@@ -89,9 +100,18 @@ class _GroupState:
         self.last_refill = now
 
 
+def _null_semaphore():
+    """无并发限制时的空信号量上下文（避免每调用分支判断）。"""
+    import contextlib
+    return contextlib.nullcontext()
+
+
 class _EMClient:
     def __init__(self) -> None:
-        self._groups = {name: _GroupState(*cfg) for name, cfg in _GROUP_RATES.items()}
+        self._groups = {
+            name: _GroupState(rate, burst, _GROUP_MAX_CONCURRENCY.get(name, 0))
+            for name, (rate, burst) in _GROUP_RATES.items()
+        }
         self._cache_lock = threading.Lock()
         self._cache: "OrderedDict[str, tuple[float, Any]]" = OrderedDict()
 
@@ -172,21 +192,25 @@ class _EMClient:
                 return cached
 
         last_error: BaseException = RuntimeError("unreachable")
-        for attempt in range(len(_RETRY_BACKOFF) + 1):
-            self._acquire(group)  # 重试同样消耗令牌，尊重限速
-            try:
-                value = fn()
-            except _CONNECTION_ERRORS as e:
-                last_error = e
-                log_debug(f"[em_client] {group} connection error on attempt "
-                          f"{attempt + 1}: {type(e).__name__}")
-                if attempt < len(_RETRY_BACKOFF):
-                    time.sleep(_RETRY_BACKOFF[attempt])
-                continue
-            self._record_success(group)
-            if cache_key and ttl_seconds > 0:
-                self._store_cache(cache_key, value)
-            return _copy_value(value)
+        state = self._groups[group]
+        # 组级并发闸：整个重试循环持锁，保证串行组内任意时刻仅一个调用在飞
+        sem_ctx = state.sem if state.sem is not None else _null_semaphore()
+        with sem_ctx:
+            for attempt in range(len(_RETRY_BACKOFF) + 1):
+                self._acquire(group)  # 重试同样消耗令牌，尊重限速
+                try:
+                    value = fn()
+                except _CONNECTION_ERRORS as e:
+                    last_error = e
+                    log_debug(f"[em_client] {group} connection error on attempt "
+                              f"{attempt + 1}: {type(e).__name__}")
+                    if attempt < len(_RETRY_BACKOFF):
+                        time.sleep(_RETRY_BACKOFF[attempt])
+                    continue
+                self._record_success(group)
+                if cache_key and ttl_seconds > 0:
+                    self._store_cache(cache_key, value)
+                return _copy_value(value)
 
         self._record_failure(group)
         raise last_error
