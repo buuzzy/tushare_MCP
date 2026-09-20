@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import datetime as dt
 from typing import Iterable
 
 import pandas as pd
 
-from tools.stats_utils import STATS_PREFIX, extremes_with_dates, fmt_num
+from tools.stats_utils import STATS_PREFIX, fmt_num
+from utils.logger import log_debug
 
 
 def split_ts_codes(ts_code: str) -> list[str]:
@@ -29,29 +31,190 @@ def is_sw_index_code(ts_code: str) -> bool:
     return exchange == "SI" and symbol.startswith("801")
 
 
+# 复权口径归一：'qfq'（默认前复权）/ 'hfq' 后复权 / '' 不复权；非法值回退 qfq。
+def normalize_adjust(adjust: str) -> str:
+    return adjust if adjust in ("qfq", "hfq", "") else "qfq"
+
+
+# 参与复权缩放的价格类列（成交量/成交额/涨跌幅不缩放：前复权乘常数因子
+# 不改变相邻日比值，pct_chg 本身已是除权调整后的真实涨跌幅）。
+_ADJ_PRICE_COLS = ("open", "high", "low", "close", "pre_close", "change")
+
+
+def _fetch_adj_factor(pro, code: str, api_params: dict) -> pd.DataFrame:
+    try:
+        af = pro.adj_factor(ts_code=code, **api_params)
+    except Exception as e:
+        log_debug(f"[adj] adj_factor fetch failed for {code}: {type(e).__name__}: {e}")
+        return pd.DataFrame()
+    if af is None or af.empty or "adj_factor" not in af.columns:
+        return pd.DataFrame()
+    return af[["trade_date", "adj_factor"]].copy()
+
+
+def _apply_price_adjustment(
+    pro, code: str, daily_df: pd.DataFrame, api_params: dict, adjust: str
+) -> pd.DataFrame:
+    """按复权因子调整价格列（工程解：模型拿到即最终口径）。
+
+    - qfq（默认）：价格 × 因子/最新因子，最新收盘保持真实价，历史价随
+      除权除息回溯调整——拆股/送转/分红不再呈现假断崖（2026-09-20 Q2
+      实测：NVDA 10:1 拆股在不复权数据上呈现 -89% 假跌幅）。
+    - hfq：价格 × 累计因子（以上市首日为基准 1）。
+    - 因子接口不可用时降级不复权，df.attrs["adjust"] 始终记录实际口径，
+      输出标题按实际口径声明，绝不虚标。
+    """
+    daily_df.attrs["adjust"] = ""
+    if adjust not in ("qfq", "hfq") or daily_df is None or daily_df.empty:
+        return daily_df
+    af = _fetch_adj_factor(pro, code, api_params)
+    if af.empty:
+        log_debug(f"[adj] no adj_factor for {code}, fallback to unadjusted")
+        return daily_df
+    merged = daily_df.merge(af, on="trade_date", how="inner")
+    if merged.empty:
+        return daily_df
+    factor = pd.to_numeric(merged["adj_factor"], errors="coerce")
+    if adjust == "qfq":
+        # 前复权基准 = 全历史最新因子。区间末即为最新（end_date 缺省或为
+        # 今天）时直接取区间内最大日期的因子；区间止于过去时补拉一次
+        # 最近因子（近 15 天窗口内必有一条），否则历史除权会漏调。
+        base = float(pd.to_numeric(af.sort_values("trade_date")["adj_factor"]).iloc[-1])
+        last_date = str(af["trade_date"].max())
+        today = dt.date.today().strftime("%Y%m%d")
+        if last_date < today:
+            try:
+                recent = pro.adj_factor(
+                    ts_code=code,
+                    start_date=(dt.date.today() - dt.timedelta(days=15)).strftime("%Y%m%d"),
+                )
+                if recent is not None and not recent.empty:
+                    base = float(pd.to_numeric(recent.sort_values("trade_date")["adj_factor"]).iloc[-1])
+            except Exception as e:
+                log_debug(f"[adj] recent factor fetch failed for {code}: {type(e).__name__}")
+        if not base:
+            return daily_df
+        k = factor / base
+    else:
+        k = factor
+    for col in _ADJ_PRICE_COLS:
+        if col in merged.columns:
+            merged[col] = (pd.to_numeric(merged[col], errors="coerce") * k).round(4)
+    merged = merged.drop(columns=["adj_factor"])
+    merged.attrs["adjust"] = adjust
+    return merged
+
+
+def _period_window_params(api_params: dict, period: str) -> dict:
+    """trade_date 单周期查询 -> 覆盖整个自然周/月的日线区间参数。
+
+    股票周/月线改为日线聚合后，trade_date（周五/月末）需换算成日线
+    start/end（回看 6/31 个自然日必覆盖该周/月），聚合后取该根。
+    """
+    trade_date = str(api_params.get("trade_date") or "")
+    if not trade_date:
+        return api_params
+    try:
+        d = dt.datetime.strptime(trade_date, "%Y%m%d").date()
+    except ValueError:
+        return api_params
+    params = {k: v for k, v in api_params.items() if k != "trade_date"}
+    back = 6 if period == "weekly" else 31
+    params["start_date"] = (d - dt.timedelta(days=back)).strftime("%Y%m%d")
+    params["end_date"] = trade_date
+    return params
+
+
+def _aggregate_stock_daily(daily_df: pd.DataFrame, period: str) -> pd.DataFrame:
+    """日线 -> 周/月线（股票，复权后聚合），附 high_date/low_date 极值发生日。
+
+    与港股/美股周月线的"日线拉取+本地聚合"口径完全对齐：原生周/月线
+    API 无极值发生日，统计行只能给周期截止日，与精确日期打架（同款
+    事故见 _hk_kline_impl 注释）。聚合后一并解决。
+    """
+    daily_df = daily_df.sort_values("trade_date").reset_index(drop=True)
+    dts = pd.to_datetime(daily_df["trade_date"], format="%Y%m%d")
+    key = dts.dt.to_period("W-SUN" if period == "weekly" else "M").astype(str)
+    grouped = daily_df.groupby(key, sort=True)
+    agg = grouped.agg(
+        ts_code=("ts_code", "first"),
+        trade_date=("trade_date", "max"),
+        open=("open", "first"),
+        high=("high", "max"),
+        low=("low", "min"),
+        close=("close", "last"),
+        vol=("vol", "sum"),
+        amount=("amount", "sum"),
+    ).reset_index(drop=True)
+    agg["high_date"] = grouped.apply(lambda g: g.loc[g["high"].idxmax(), "trade_date"]).values
+    agg["low_date"] = grouped.apply(lambda g: g.loc[g["low"].idxmin(), "trade_date"]).values
+    agg["pre_close"] = agg["close"].shift(1)
+    agg["change"] = agg["close"] - agg["pre_close"]
+    agg["pct_chg"] = agg["change"] / agg["pre_close"] * 100
+    return agg
+
+
+def _fetch_stock_adjusted(
+    pro, code: str, period: str, api_params: dict, adjust: str
+) -> pd.DataFrame:
+    """股票 K 线统一入口：日线 + 复权因子，周/月线本地聚合。
+
+    pro.daily/pro.weekly/pro.monthly 均为不复权价，且原生周/月线无极值
+    发生日。股票侧一律走 daily + adj_factor（qfq 默认）再聚合，一个入口
+    同时解决复权缺口与极值日期缺口；指数/申万无复权概念，不走此函数。
+    """
+    adjust = normalize_adjust(adjust)
+    query_params = api_params if period == "daily" else _period_window_params(api_params, period)
+    daily_df = pro.daily(ts_code=code, **query_params)
+    if daily_df is None or daily_df.empty:
+        return pd.DataFrame()
+    daily_df = _apply_price_adjustment(pro, code, daily_df, query_params, adjust)
+    if period == "daily":
+        return daily_df
+    agg = _aggregate_stock_daily(daily_df, period)
+    original = str(api_params.get("trade_date") or "")
+    if original:
+        agg = agg[agg["trade_date"] == original]
+    agg.attrs["adjust"] = daily_df.attrs.get("adjust", "")
+    return agg
+
+
 def fetch_quote_data(
     pro,
     stock_api: str,
     index_api: str,
     period: str,
     ts_code: str,
+    adjust: str = "qfq",
     **api_params,
 ) -> pd.DataFrame:
-    """Fetch stock or index quotes, splitting multi-code requests locally."""
+    """Fetch stock or index quotes, splitting multi-code requests locally.
+
+    股票代码走 _fetch_stock_adjusted（daily + adj_factor，默认前复权，
+    周/月线本地聚合出极值发生日）；指数/申万无复权概念，保持原 API。
+    df.attrs["adjust"] 记录股票侧实际生效口径，供输出标题声明。
+    """
     codes = split_ts_codes(ts_code)
     if not codes:
         return getattr(pro, stock_api)(**api_params)
 
     frames: list[pd.DataFrame] = []
     sw_codes: list[str] = []
+    effective_adjust = ""
     for code in codes:
         if is_sw_index_code(code):
             sw_codes.append(code)
-        else:
-            api_name = index_api if is_index_code(code) else stock_api
+            continue
+        if is_index_code(code):
+            api_name = index_api
             frame = getattr(pro, api_name)(**api_params, ts_code=code)
-            if frame is not None and not frame.empty:
-                frames.append(frame)
+        elif stock_api in ("daily", "weekly", "monthly"):
+            frame = _fetch_stock_adjusted(pro, code, period, api_params, adjust)
+            effective_adjust = str(frame.attrs.get("adjust", "")) or effective_adjust
+        else:
+            frame = getattr(pro, stock_api)(**api_params, ts_code=code)
+        if frame is not None and not frame.empty:
+            frames.append(frame)
 
     if sw_codes:
         frame = _fetch_sw_quote_data(
@@ -65,7 +228,9 @@ def fetch_quote_data(
 
     if not frames:
         return pd.DataFrame()
-    return pd.concat(frames, ignore_index=True)
+    df = pd.concat(frames, ignore_index=True)
+    df.attrs["adjust"] = effective_adjust
+    return df
 
 
 def _fetch_sw_quote_data(
@@ -149,17 +314,29 @@ def _select_display_rows(df: pd.DataFrame, requested_codes: Iterable[str], per_c
 
 
 def _interval_stats_line(sub: pd.DataFrame, code: str | None) -> str | None:
-    """单个代码区间的服务端统计行（对全量 df 计算，含未显示的行）。"""
+    """单个代码区间的服务端统计行（对全量 df 计算，含未显示的行）。
+
+    周/月线场景 df 附带 high_date/low_date（极值发生的具体交易日），
+    统计行优先取极值日而非周期截止日，与港股/美股口径一致。
+    """
     if sub.empty:
         return None
     date_col = "trade_date"
     parts = []
-    ext = extremes_with_dates(sub, date_col, "high")
-    if ext:
-        parts.append(f"区间最高 high={fmt_num(ext[0])}（{ext[1]}）")
-    ext = extremes_with_dates(sub, date_col, "low")
-    if ext:
-        parts.append(f"区间最低 low={fmt_num(ext[2])}（{ext[3]}）")
+
+    def _extreme(value_col: str, date_attr: str):
+        if value_col not in sub.columns or sub[value_col].dropna().empty:
+            return None, None
+        row = sub.loc[sub[value_col].idxmax() if value_col == "high" else sub[value_col].idxmin()]
+        date = row[date_attr] if date_attr in sub.columns and pd.notna(row.get(date_attr)) else row[date_col]
+        return row[value_col], date
+
+    hi_val, hi_date = _extreme("high", "high_date")
+    if hi_val is not None:
+        parts.append(f"区间最高 high={fmt_num(hi_val)}（{hi_date}）")
+    lo_val, lo_date = _extreme("low", "low_date")
+    if lo_val is not None:
+        parts.append(f"区间最低 low={fmt_num(lo_val)}（{lo_date}）")
 
     # 区间涨跌幅：最早/最新收盘价由代码计算，避免模型自行除法出错
     if "close" in sub.columns:
@@ -176,17 +353,22 @@ def _interval_stats_line(sub: pd.DataFrame, code: str | None) -> str | None:
     return f"... {STATS_PREFIX}{tag}" + "；".join(parts)
 
 
-def format_quote_data(df: pd.DataFrame, period: str, requested_codes: Iterable[str]) -> str:
+def format_quote_data(
+    df: pd.DataFrame, period: str, requested_codes: Iterable[str], adjust: str = ""
+) -> str:
     labels = {
         "daily": ("日线", ""),
         "weekly": ("周线", "周"),
         "monthly": ("月线", "月"),
     }
     period_name, value_prefix = labels[period]
+    # 口径声明以实际生效的复权为准（fetch 阶段因子不可用会降级，attrs 不撒谎）
+    effective = str(df.attrs.get("adjust", "")) or normalize_adjust(adjust)
+    adjust_suffix = {"qfq": "，前复权", "hfq": "，后复权"}.get(effective, "")
     display_df = _select_display_rows(df, requested_codes, per_code_limit=50)
     requested_code_list = list(requested_codes)
 
-    results = [f"--- {period_name}行情数据 (Total: {len(df)}) ---"]
+    results = [f"--- {period_name}行情数据 (Total: {len(df)}{adjust_suffix}) ---"]
     for _, row in display_df.iterrows():
         info = []
         if pd.notna(row.get("trade_date")):
@@ -199,13 +381,19 @@ def format_quote_data(df: pd.DataFrame, period: str, requested_codes: Iterable[s
         for field, label in (
             ("open", "开盘"),
             ("high", "最高"),
+            ("high_date", "最高日"),
             ("low", "最低"),
+            ("low_date", "最低日"),
             ("close", "收盘"),
             ("pre_close", pre_close_label),
             ("change", "涨跌额"),
             ("pct_chg", "涨跌幅"),
         ):
             if pd.notna(row.get(field)):
+                if field in ("high_date", "low_date"):
+                    # 极值发生日不带周期前缀（"最高日"而非"周最高日"）
+                    info.append(f"{label}:{row[field]}")
+                    continue
                 info.append(f"{value_prefix}{label}:{row[field]}")
         if pd.notna(row.get("pct_chg")):
             info[-1] += "%"

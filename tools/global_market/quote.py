@@ -279,6 +279,23 @@ def _fetch_em_kline_hk(code: str, start: str, end: str, adjust: str) -> tuple[pd
     return df, name
 
 
+def _kline_title(title: str, adjust: str) -> str:
+    """K 线标题附复权口径声明（实际生效口径，模型与用户都能直接看到）。"""
+    suffix = {"qfq": "（前复权）", "hfq": "（后复权）"}.get(adjust, "")
+    return f"{title}{suffix}"
+
+
+def _normalize_kline_adjust(adjust: str) -> str:
+    """K 线复权口径归一：默认/非法值一律回退前复权 qfq。
+
+    2026-09-20 Q2 前端实测：不复权数据在拆股/大额分红时呈现假断崖
+    （NVDA 10:1 拆股 → -89% 假跌幅，模型据此把区间最高答错），故
+    日/周/月线默认前复权；显式传 adjust='' 才取不复权原始价。
+    指数无复权概念，不经过此归一。
+    """
+    return adjust if adjust in ("qfq", "hfq", "") else "qfq"
+
+
 def _hk_kline_impl(period: str, symbol: str, start_date: str, end_date: str, adjust: str) -> str:
     log_debug(f"[global_kline] HK/{period} symbol='{symbol}'")
     if not symbol:
@@ -287,7 +304,7 @@ def _hk_kline_impl(period: str, symbol: str, start_date: str, end_date: str, adj
     if not code:
         return f"错误：无法识别的港股代码 '{symbol}'（示例：00700 或 700）"
     start, end, _ = _normalize_dates(start_date, end_date)
-    adjust = adjust if adjust in ("qfq", "hfq") else ""
+    adjust = _normalize_kline_adjust(adjust)
     span_days = (dt.date.fromisoformat(end) - dt.date.fromisoformat(start)).days
 
     df, name = pd.DataFrame(), ""
@@ -345,7 +362,7 @@ def _hk_kline_impl(period: str, symbol: str, start_date: str, end_date: str, adj
         hint = hint or "该代码可能不存在或已退市，建议与用户确认代码；也可用 search_symbol 按名称搜索"
         return (f"未找到港股{_PERIOD_CN[period]}行情数据（symbol='{symbol}'，"
                 f"区间 {start}~{end}）。{hint}")
-    return format_kline(df, f"港股{_PERIOD_CN[period]}行情", "港元", f"{code}.HK", name) + _staleness_note(df, end)
+    return format_kline(df, _kline_title(f"港股{_PERIOD_CN[period]}行情", adjust), "港元", f"{code}.HK", name) + _staleness_note(df, end)
 
 
 def _us_kline_impl(period: str, symbol: str, start_date: str, end_date: str, adjust: str) -> str:
@@ -391,7 +408,7 @@ def _us_kline_impl(period: str, symbol: str, start_date: str, end_date: str, adj
 
     if df.empty:
         return f"未找到美股行情数据（symbol='{symbol}'，区间 {start}~{end}）"
-    return format_kline(df, f"美股{_PERIOD_CN[period]}行情", "美元", ticker, _lookup_name("US", ticker)) + _staleness_note(df, end)
+    return format_kline(df, _kline_title(f"美股{_PERIOD_CN[period]}行情", adjust), "美元", ticker, _lookup_name("US", ticker)) + _staleness_note(df, end)
 
 
 def _fetch_us_index_kline(code: str, period: str, start: str, end: str) -> pd.DataFrame:
@@ -434,13 +451,13 @@ def register_quote_tools(mcp) -> None:
 
     @mcp.tool()
     @handle_exception
-    def hk_daily(symbol: str, start_date: str = "", end_date: str = "", adjust: str = "") -> str:
+    def hk_daily(symbol: str, start_date: str = "", end_date: str = "", adjust: str = "qfq") -> str:
         """
-        获取港股日线行情（前复权可选，默认近3年、最早可到 2000 年代）。
+        获取港股日线行情（默认前复权，近3年、最早可到 2000 年代）。
         输出：date | open | high | low | close | pct_chg | vol(股) | amount。
-        代码/名称/货币在标题行声明一次。
+        代码/名称/货币/复权口径在标题行声明一次。
 
-        标的核验：标题行形如 "--- 港股周线行情 | 00700.HK 腾讯控股 | ..."，
+        标的核验：标题行形如 "--- 港股日线行情（前复权） | 00700.HK 腾讯控股 | ..."，
         即为该代码经权威代码表解析后的结果，可直接作为标的确认依据，
         无需再调用 search_symbol 复核同一代码。
 
@@ -455,15 +472,18 @@ def register_quote_tools(mcp) -> None:
             symbol: 港股代码（'00700'=腾讯控股，支持 '700' 简写）
             start_date: 开始日期 (YYYYMMDD，可选，默认近3年)
             end_date: 结束日期 (YYYYMMDD，可选)
-            adjust: 复权：''不复权 / 'qfq'前复权 / 'hfq'后复权（可选）
+            adjust: 复权：'qfq'前复权(默认) / 'hfq'后复权 / ''不复权 (可选)。
+                    前复权已剔除拆股/送转/分红的假断崖，区间极值与涨跌幅
+                    均为可比口径；不复权仅在核对历史真实成交价时使用。
         """
         return _hk_kline_impl("daily", symbol, start_date, end_date, adjust)
 
     @mcp.tool()
     @handle_exception
-    def hk_weekly(symbol: str, start_date: str = "", end_date: str = "", adjust: str = "") -> str:
+    def hk_weekly(symbol: str, start_date: str = "", end_date: str = "", adjust: str = "qfq") -> str:
         """
-        获取港股周线行情。参数同 hk_daily（symbol 如 '00700'=腾讯控股）。
+        获取港股周线行情。参数同 hk_daily（symbol 如 '00700'=腾讯控股），
+        默认前复权（'qfq'），显式 adjust='' 取不复权。
 
         服务端已按日线聚合：每周 high/low 为当周日内最高/最低，输出列含
         high_date/low_date（极值发生的具体交易日），📊 区间统计行的极值
@@ -473,9 +493,10 @@ def register_quote_tools(mcp) -> None:
 
     @mcp.tool()
     @handle_exception
-    def hk_monthly(symbol: str, start_date: str = "", end_date: str = "", adjust: str = "") -> str:
+    def hk_monthly(symbol: str, start_date: str = "", end_date: str = "", adjust: str = "qfq") -> str:
         """
-        获取港股月线行情。参数同 hk_daily（symbol 如 '00700'=腾讯控股）。
+        获取港股月线行情。参数同 hk_daily（symbol 如 '00700'=腾讯控股），
+        默认前复权（'qfq'），显式 adjust='' 取不复权。
 
         服务端已按日线聚合：每月 high/low 为当月日内最高/最低，输出列含
         high_date/low_date（极值发生的具体交易日），📊 区间统计行的极值
@@ -485,13 +506,13 @@ def register_quote_tools(mcp) -> None:
 
     @mcp.tool()
     @handle_exception
-    def us_daily(symbol: str, start_date: str = "", end_date: str = "", adjust: str = "") -> str:
+    def us_daily(symbol: str, start_date: str = "", end_date: str = "", adjust: str = "qfq") -> str:
         """
-        获取美股日线行情（前复权可选，默认近3年）。
+        获取美股日线行情（默认前复权，近3年）。
         输出：date | open | high | low | close | pct_chg | vol(股) | amount。
-        代码/名称/货币在标题行声明一次。
+        代码/名称/货币/复权口径在标题行声明一次。
 
-        标的核验：标题行形如 "--- 美股周线行情 | AAPL 苹果 | ..."，
+        标的核验：标题行形如 "--- 美股日线行情（前复权） | AAPL 苹果 | ..."，
         即为该代码经权威代码表解析后的结果，可直接作为标的确认依据，
         无需再调用 search_symbol 复核同一代码。
 
@@ -506,14 +527,18 @@ def register_quote_tools(mcp) -> None:
             symbol: 美股代码（'AAPL'=苹果）
             start_date: 开始日期 (YYYYMMDD，可选，默认近3年)
             end_date: 结束日期 (YYYYMMDD，可选)
-            adjust: 复权：''不复权 / 'qfq'前复权 / 'hfq'后复权（可选）
+            adjust: 复权：'qfq'前复权(默认) / 'hfq'后复权 / ''不复权 (可选)。
+                    前复权已剔除拆股/分红的假断崖（如 10:1 拆股的 -89% 假
+                    跌幅），区间极值与涨跌幅均为可比口径；不复权仅在核对
+                    历史真实成交价时使用。
         """
         return _us_kline_impl("daily", symbol, start_date, end_date, adjust)
 
     @mcp.tool()
     @handle_exception
-    def us_weekly(symbol: str, start_date: str = "", end_date: str = "", adjust: str = "") -> str:
-        """获取美股周线行情。参数同 us_daily（symbol 如 'AAPL'=苹果）。
+    def us_weekly(symbol: str, start_date: str = "", end_date: str = "", adjust: str = "qfq") -> str:
+        """获取美股周线行情。参数同 us_daily（symbol 如 'AAPL'=苹果），
+        默认前复权（'qfq'），显式 adjust='' 取不复权。
 
         服务端已按日线聚合：输出列含 high_date/low_date（极值发生的具体
         交易日），📊 区间统计行的极值价格与日期均已精确到日，直接引用即可，
@@ -523,8 +548,9 @@ def register_quote_tools(mcp) -> None:
 
     @mcp.tool()
     @handle_exception
-    def us_monthly(symbol: str, start_date: str = "", end_date: str = "", adjust: str = "") -> str:
-        """获取美股月线行情。参数同 us_daily（symbol 如 'AAPL'=苹果）。
+    def us_monthly(symbol: str, start_date: str = "", end_date: str = "", adjust: str = "qfq") -> str:
+        """获取美股月线行情。参数同 us_daily（symbol 如 'AAPL'=苹果），
+        默认前复权（'qfq'），显式 adjust='' 取不复权。
 
         服务端已按日线聚合：输出列含 high_date/low_date（极值发生的具体
         交易日），📊 区间统计行的极值价格与日期均已精确到日，直接引用即可，

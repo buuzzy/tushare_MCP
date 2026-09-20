@@ -70,6 +70,9 @@ CASES = [
     # 聚合极值发生日（f456abb）：3 年窗口聚周线必须携带极值的具体交易日
     ("hk_daily", {"symbol": "00700", "start_date": "20230920", "end_date": "20260920"},
      "high_date:2025-10-02", 150),
+    # 复权口径（2026-09-20 Q2 回归）：默认前复权，标题行必须声明
+    ("hk_daily", {"symbol": "00700", "start_date": "20260901"}, "（前复权）", 8),
+    ("us_daily", {"symbol": "NVDA", "start_date": "20260901"}, "（前复权）", 5),
     # 上市前区间无数据：错误消息应带候选 hint（suggest 回填中文名）
     ("hk_daily", {"symbol": "02714", "start_date": "20230101", "end_date": "20240101"}, "牧原股份", 0),
     ("hk_weekly", {"symbol": "00700", "start_date": "20260801"}, "| 00700.HK 腾讯控股 |", 4),
@@ -88,6 +91,12 @@ CASES = [
     ("us_daily", {"symbol": "AAPL", "start_date": "20260901"}, "| AAPL ", 7),
     ("us_daily", {"symbol": "SNDK", "start_date": "20260827"}, "| SNDK ", 8),
     ("us_weekly", {"symbol": "AAPL", "start_date": "20260801"}, "| AAPL ", 4),
+    # 美股前复权（2026-09-20 Q2 回归）：NVDA 10:1 拆股曾致 -89% 假断崖。
+    # 精确极值随未来除权漂移，只断言口径声明 + 数据拉全；
+    # 新浪源 qfq 口径下 3 年区间最高=236.29（2026-05-14），与东财口径
+    # （234.76@2026-09-04）存在源间分歧，见 2026-09-20 会话记录
+    ("us_daily", {"symbol": "NVDA", "start_date": "20230920", "end_date": "20260920"},
+     "（前复权）", 150),
     ("global_index_daily", {"symbol": "HSI", "start_date": "20260901"}, "hkHSI 恒生指数", 8),
     ("global_index_daily", {"symbol": "SPX", "start_date": "20260901"}, ".INX 标普500指数", 5),
     ("global_index_daily", {"symbol": "DJIA", "start_date": "20260901"}, ".DJI 道琼斯工业指数", 5),
@@ -101,6 +110,16 @@ CASES = [
      "📊 区间统计（服务端已计算", 0, "astock"),
     ("fund_nav", {"ts_code": "001102.OF", "start_date": "20250901", "end_date": "20260920"},
      "📊 区间统计（服务端已计算", 0, "astock"),
+    # ---- A股复权口径（2026-09-20 Q2 同款缺口回归，category="astock"）----
+    # 股票默认前复权：标题行必须声明（600519 近年连年分红，不复权会有假缺口）
+    ("daily", {"ts_code": "600519.SH", "start_date": "20230920", "end_date": "20260920"},
+     "前复权", 50, "astock"),
+    # 股票周线改日线聚合：必须携带极值发生日（与港美股周线口径对齐）
+    ("weekly", {"ts_code": "600519.SH", "start_date": "20230920", "end_date": "20260920"},
+     "最高日", 100, "astock"),
+    # 指数不受复权影响：标题行不得出现前复权声明
+    ("daily", {"ts_code": "000300.SH", "start_date": "20260901"},
+     "000300.SH", 5, "astock"),
 ]
 
 def _case_category(case) -> str:
