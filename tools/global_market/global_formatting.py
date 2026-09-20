@@ -65,6 +65,39 @@ def _fmt_value(field: str, value) -> str:
 _TRUNCATE_HEAD_N = 50
 
 
+def _aggregate_kline(df: pd.DataFrame, freq: str) -> pd.DataFrame:
+    """日线 -> 周线/月线（freq: 'W'=周 / 'M'=月）。
+
+    每根周/月线：open=期内首日开盘、high/low=期内日内最高/最低、
+    close=期末日收盘、vol/amount 期内求和、pct_chg 由相邻期收盘价重算
+    （首期无前期收盘则留空）。求区间最高/最低/涨跌幅与日线完全等效，
+    因此超长窗口降级周/月线后模型一次查询即可正确作答，无需分段补查。
+    """
+    dt = pd.to_datetime(df["日期"])
+    key = dt.dt.strftime("%G-%V") if freq == "W" else dt.dt.strftime("%Y-%m")
+    rows = []
+    for _, g in df.groupby(key, sort=False):
+        row = {"日期": g["日期"].iloc[-1]}
+        if "开盘" in g:
+            row["开盘"] = g["开盘"].iloc[0]
+        if "最高" in g:
+            row["最高"] = g["最高"].max()
+        if "最低" in g:
+            row["最低"] = g["最低"].min()
+        if "收盘" in g:
+            row["收盘"] = g["收盘"].iloc[-1]
+        if "成交量" in g:
+            row["成交量"] = g["成交量"].sum()
+        if "成交额" in g:
+            row["成交额"] = g["成交额"].sum()
+        rows.append(row)
+    agg = pd.DataFrame(rows)
+    if "收盘" in agg and len(agg) > 0:
+        prev = agg["收盘"].shift(1)
+        agg["涨跌幅"] = ((agg["收盘"] / prev) - 1) * 100
+    return agg
+
+
 def format_kline(
     df: pd.DataFrame,
     title: str,
@@ -79,16 +112,42 @@ def format_kline(
         date:YYYY-MM-DD|open:..|high:..|low:..|close:..|pct_chg:..|vol:..|amount:..
     代码/名称/货币只在标题行声明一次，行内不重复。
 
-    截断策略：保留最早 _TRUNCATE_HEAD_N 条 + 最新（per_code_limit - head）条，
-    并在标题行下方紧贴一条置顶省略提示（Agent 对开头的注意力远高于末尾脚注，
-    2026-09-20 实测：末尾脚注被无视，模型把尾部 50 根当全区间求最高/最低）。
+    超长窗口策略：日线超过 per_code_limit 时自动聚合为周线（仍超则月线），
+    置顶声明等效性——2026-09-20 实测：截断+提示"分段查询"后模型仍会漏查
+    省略段、凭记忆填极值；周线的 high/low 即当周日内极值，等效后一次查询
+    即可正确作答，从源头消灭分段/补查/编造。
     """
     if df is None or df.empty:
         return f"未找到{title}数据"
     total = len(df)
+
+    agg_df, agg_note, fallback_truncate = df, "", False
+    if total > per_code_limit:
+        weekly = _aggregate_kline(df, "W")
+        if len(weekly) <= per_code_limit:
+            agg_df = weekly
+            title = title.replace("日线", "周线")
+            agg_note = (
+                f"原始 {total} 根日线超过 250 上限，已自动聚合为 {len(weekly)} 根周线"
+                f"（每周的 high/low 为当周日内最高/最低，求区间最高/最低/涨跌幅与日线完全等效，"
+                f"无需分段查询）；如需某段日线明细，请缩小日期范围重新查询。"
+            )
+        else:
+            monthly = _aggregate_kline(df, "M")
+            if len(monthly) <= per_code_limit:
+                agg_df = monthly
+                title = title.replace("日线", "月线")
+                agg_note = (
+                    f"原始 {total} 根日线超过上限，已自动聚合为 {len(monthly)} 根月线"
+                    f"（每月的 high/low 为当月日内最高/最低，求区间最高/最低/涨跌幅与日线等效）。"
+                )
+            else:
+                # 极端长历史（26 年+月线仍超限）：退回首尾截断
+                agg_df, fallback_truncate = monthly, True
+
     lines = [
         f"--- {title} | {code_label} {name} | 单位:{currency} | "
-        f"列: date,open,high,low,close,pct_chg,vol(股),amount (Total: {total}) ---"
+        f"列: date,open,high,low,close,pct_chg,vol(股),amount (Total: {len(agg_df)}) ---"
     ]
 
     def _bar_line(row) -> str:
@@ -109,23 +168,24 @@ def format_kline(
             parts.append(f"amount:{amt_text}")
         return "|".join(parts)
 
-    if total <= per_code_limit:
-        for _, row in df.iterrows():
-            lines.append(_bar_line(row))
-    else:
+    if agg_note:
+        # 置顶提示：紧跟标题行，Agent 首先看到的就是它
+        lines.append(f"... ⚠️ {agg_note}")
+
+    if fallback_truncate:
         head_n = min(_TRUNCATE_HEAD_N, per_code_limit)
         tail_n = per_code_limit - head_n
-        full_start, full_end = df["日期"].iloc[0], df["日期"].iloc[-1]
-        # 置顶提示：紧跟标题行，Agent 首先看到的就是它
         lines.append(
-            f"... ⚠️ 共 {total} 条，仅显示最早 {head_n} 条 + 最新 {tail_n} 条，"
-            f"完整区间 {full_start} ~ {full_end}，中间有省略；"
-            f"求区间最高/最低/涨跌幅请缩小日期范围分段查询，或改用 weekly/monthly。"
+            f"... ⚠️ 共 {total} 条，仅显示最早 {head_n} 条 + 最新 {tail_n} 条月线，"
+            f"完整区间 {df['日期'].iloc[0]} ~ {df['日期'].iloc[-1]}，中间有省略。"
         )
-        for _, row in df.head(head_n).iterrows():
+        for _, row in agg_df.head(head_n).iterrows():
             lines.append(_bar_line(row))
         lines.append("... （中间省略）...")
-        for _, row in df.tail(tail_n).iterrows():
+        for _, row in agg_df.tail(tail_n).iterrows():
+            lines.append(_bar_line(row))
+    else:
+        for _, row in agg_df.iterrows():
             lines.append(_bar_line(row))
     return "\n".join(lines)
 

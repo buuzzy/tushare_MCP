@@ -352,16 +352,29 @@ class FormattingTests(unittest.TestCase):
         self.assertIn("amount:6670000000", out)
         self.assertEqual(out.count("00700.HK"), 1)  # 行内不重复代码
 
-    def test_format_kline_truncated_notice_states_range(self):
-        # 截断时置顶提示必须自述完整区间，且保留最早+最新两段
+    def test_format_kline_long_window_aggregates_weekly(self):
+        # 超过 250 根 → 自动聚合周线，极值/涨跌幅与日线等效（2026-09-20 实测：
+        # 截断+提示分段后模型仍漏查省略段、凭记忆填极值，故改为等效聚合）
         dates = pd.date_range("2026-01-01", periods=300, freq="D").strftime("%Y-%m-%d")
-        df = pd.DataFrame({"日期": dates, "收盘": [40.0] * 300, "成交量": [1.0] * 300})
+        df = pd.DataFrame({
+            "日期": dates, "开盘": [40.0] * 300, "最高": [45.0] * 300,
+            "最低": [38.0] * 300, "收盘": [42.0] * 300, "成交量": [1.0] * 300,
+        })
+        # 制造可验证的极值：第 100 天最高 99，第 200 天最低 11
+        df.loc[99, "最高"] = 99.0
+        df.loc[199, "最低"] = 11.0
         out = format_kline(df, "港股日线行情", "港元", "02714.HK", "牧原股份")
-        self.assertIn("共 300 条", out)
-        self.assertIn("完整区间 2026-01-01 ~ 2026-10-27", out)
-        self.assertIn("date:2026-01-01", out)   # 最早段保留
-        self.assertIn("date:2026-10-27", out)   # 最新段保留
-        self.assertIn("中间省略", out)          # 中段有显式省略标记
+        self.assertIn("港股周线行情", out)                     # 标题已改为周线
+        self.assertIn("已自动聚合", out)                       # 置顶声明等效性
+        self.assertIn("无需分段查询", out)
+        self.assertNotIn("中间省略", out)                      # 不再截断
+        self.assertIn("high:99", out)                          # 周内极值保留
+        self.assertIn("low:11", out)
+        weekly_bars = [l for l in out.split("\n") if l.startswith("date:")]
+        self.assertLessEqual(len(weekly_bars), 250)            # 上限内
+        self.assertGreaterEqual(len(weekly_bars), 40)          # 300 天 ≈ 43 周
+        # 周线日期 = 每周最后一个交易日
+        self.assertIn("date:2026-01-04", out)                  # 首周（周日收尾）
 
     def test_format_kline_empty(self):
         self.assertEqual(format_kline(pd.DataFrame(), "港股日线行情", "港元", "x", "y"),
