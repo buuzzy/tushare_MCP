@@ -70,8 +70,10 @@ def _aggregate_kline(df: pd.DataFrame, freq: str) -> pd.DataFrame:
 
     每根周/月线：open=期内首日开盘、high/low=期内日内最高/最低、
     close=期末日收盘、vol/amount 期内求和、pct_chg 由相邻期收盘价重算
-    （首期无前期收盘则留空）。求区间最高/最低/涨跌幅与日线完全等效，
-    因此超长窗口降级周/月线后模型一次查询即可正确作答，无需分段补查。
+    （首期无前期收盘则留空）。另附最高日/最低日——极值发生的具体交易日，
+    模型求区间极值时价格与日期可一次性引用，无需再拉日线明细核对。
+    求区间最高/最低/涨跌幅与日线完全等效，因此超长窗口降级周/月线后
+    模型一次查询即可正确作答，无需分段补查。
     """
     dt = pd.to_datetime(df["日期"])
     key = dt.dt.strftime("%G-%V") if freq == "W" else dt.dt.strftime("%Y-%m")
@@ -82,8 +84,10 @@ def _aggregate_kline(df: pd.DataFrame, freq: str) -> pd.DataFrame:
             row["开盘"] = g["开盘"].iloc[0]
         if "最高" in g:
             row["最高"] = g["最高"].max()
+            row["最高日"] = str(g.loc[g["最高"].idxmax(), "日期"])
         if "最低" in g:
             row["最低"] = g["最低"].min()
+            row["最低日"] = str(g.loc[g["最低"].idxmin(), "日期"])
         if "收盘" in g:
             row["收盘"] = g["收盘"].iloc[-1]
         if "成交量" in g:
@@ -115,7 +119,8 @@ def format_kline(
     超长窗口策略：日线超过 per_code_limit 时自动聚合为周线（仍超则月线），
     置顶声明等效性——2026-09-20 实测：截断+提示"分段查询"后模型仍会漏查
     省略段、凭记忆填极值；周线的 high/low 即当周日内极值，等效后一次查询
-    即可正确作答，从源头消灭分段/补查/编造。
+    即可正确作答，从源头消灭分段/补查/编造。聚合行额外携带 high_date/
+    low_date（极值发生的具体交易日），图文引用口径天然一致，无需二段补查。
     """
     if df is None or df.empty:
         return f"未找到{title}数据"
@@ -129,8 +134,10 @@ def format_kline(
             title = title.replace("日线", "周线")
             agg_note = (
                 f"原始 {total} 根日线超过 250 上限，已自动聚合为 {len(weekly)} 根周线"
-                f"（每周的 high/low 为当周日内最高/最低，求区间最高/最低/涨跌幅与日线完全等效，"
-                f"无需分段查询）；如需某段日线明细，请缩小日期范围重新查询。"
+                f"（每周 high/low 为当周日内最高/最低，high_date/low_date 为其发生的"
+                f"具体交易日；求区间最高/最低/涨跌幅与日线完全等效，极值价格与日期"
+                f"直接引用本结果即可，无需分段或补查日线）；如需某段日线明细，"
+                f"请缩小日期范围重新查询。"
             )
         else:
             monthly = _aggregate_kline(df, "M")
@@ -139,15 +146,22 @@ def format_kline(
                 title = title.replace("日线", "月线")
                 agg_note = (
                     f"原始 {total} 根日线超过上限，已自动聚合为 {len(monthly)} 根月线"
-                    f"（每月的 high/low 为当月日内最高/最低，求区间最高/最低/涨跌幅与日线等效）。"
+                    f"（每月 high/low 为当月日内最高/最低，high_date/low_date 为其发生的"
+                    f"具体交易日；求区间最高/最低/涨跌幅与日线等效，极值价格与日期"
+                    f"直接引用本结果即可）。"
                 )
             else:
                 # 极端长历史（26 年+月线仍超限）：退回首尾截断
                 agg_df, fallback_truncate = monthly, True
 
+    # 列声明随输出内容自适应：聚合输出附带极值发生日
+    if "最高日" in agg_df.columns:
+        cols = "date,open,high,high_date,low,low_date,close,pct_chg,vol(股),amount"
+    else:
+        cols = "date,open,high,low,close,pct_chg,vol(股),amount"
     lines = [
         f"--- {title} | {code_label} {name} | 单位:{currency} | "
-        f"列: date,open,high,low,close,pct_chg,vol(股),amount (Total: {len(agg_df)}) ---"
+        f"列: {cols} (Total: {len(agg_df)}) ---"
     ]
 
     def _bar_line(row) -> str:
@@ -155,6 +169,10 @@ def format_kline(
         for src, key in (("开盘", "open"), ("最高", "high"), ("最低", "low"), ("收盘", "close")):
             if src in row and pd.notna(row[src]):
                 parts.append(f"{key}:{_fmt_value(key, row[src])}")
+        if "最高日" in row and pd.notna(row["最高日"]):
+            parts.append(f"high_date:{row['最高日']}")
+        if "最低日" in row and pd.notna(row["最低日"]):
+            parts.append(f"low_date:{row['最低日']}")
         if "涨跌幅" in row and pd.notna(row["涨跌幅"]):
             # pct_chg：数值不带 %（parseNum 会剥掉单位，省字符）
             parts.append(f"pct_chg:{_fmt_value('pct_chg', row['涨跌幅'])}")

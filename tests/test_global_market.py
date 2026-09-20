@@ -366,10 +366,14 @@ class FormattingTests(unittest.TestCase):
         out = format_kline(df, "港股日线行情", "港元", "02714.HK", "牧原股份")
         self.assertIn("港股周线行情", out)                     # 标题已改为周线
         self.assertIn("已自动聚合", out)                       # 置顶声明等效性
-        self.assertIn("无需分段查询", out)
+        self.assertIn("无需分段或补查日线", out)
         self.assertNotIn("中间省略", out)                      # 不再截断
         self.assertIn("high:99", out)                          # 周内极值保留
         self.assertIn("low:11", out)
+        # 极值发生日随聚合输出（模型可直接引用，无需补查日线锁定日期）
+        self.assertIn("high_date:2026-04-10", out)             # 第 100 天（2026-01-01 + 99 天）
+        self.assertIn("low_date:2026-07-19", out)              # 第 200 天（2026-01-01 + 199 天）
+        self.assertIn("high,high_date,low,low_date", out)      # 列声明已更新
         weekly_bars = [l for l in out.split("\n") if l.startswith("date:")]
         self.assertLessEqual(len(weekly_bars), 250)            # 上限内
         self.assertGreaterEqual(len(weekly_bars), 40)          # 300 天 ≈ 43 周

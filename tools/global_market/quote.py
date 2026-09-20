@@ -356,14 +356,17 @@ def _us_kline_impl(period: str, symbol: str, start_date: str, end_date: str, adj
 
     df = df[(df["日期"] >= start) & (df["日期"] <= end)]
     if period in ("weekly", "monthly"):
-        # 新浪源仅提供日线，周/月线本地聚合（美股周线以周五为界）
+        # 新浪源仅提供日线，周/月线本地聚合（美股周线以周五为界），
+        # 并附极值发生日（与 format_kline 聚合口径一致）
         dates = pd.to_datetime(df["日期"])
         period_key = (dates.dt.to_period("W-FRI") if period == "weekly"
                       else dates.dt.to_period("M")).astype(str)
-        df = (df.groupby(period_key, sort=True)
-                .agg(日期=("日期", "first"), 开盘=("开盘", "first"), 最高=("最高", "max"),
-                     最低=("最低", "min"), 收盘=("收盘", "last"), 成交量=("成交量", "sum"))
-                .reset_index(drop=True))
+        grouped = df.groupby(period_key, sort=True)
+        df = (grouped.agg(日期=("日期", "first"), 开盘=("开盘", "first"), 最高=("最高", "max"),
+                          最低=("最低", "min"), 收盘=("收盘", "last"), 成交量=("成交量", "sum"))
+              .reset_index(drop=True))
+        df["最高日"] = grouped.apply(lambda g: g.loc[g["最高"].idxmax(), "日期"]).values
+        df["最低日"] = grouped.apply(lambda g: g.loc[g["最低"].idxmin(), "日期"]).values
         df["涨跌额"] = df["收盘"] - df["收盘"].shift(1)
         df["涨跌幅"] = df["涨跌额"] / df["收盘"].shift(1) * 100
 
@@ -395,10 +398,12 @@ def _fetch_us_index_kline(code: str, period: str, start: str, end: str) -> pd.Da
         dates = pd.to_datetime(out["日期"])
         period_key = (dates.dt.to_period("W-FRI") if period == "weekly"
                       else dates.dt.to_period("M")).astype(str)
-        out = (out.groupby(period_key, sort=True)
-                  .agg(日期=("日期", "first"), 开盘=("开盘", "first"), 最高=("最高", "max"),
-                       最低=("最低", "min"), 收盘=("收盘", "last"), 成交量=("成交量", "sum"))
-                  .reset_index(drop=True))
+        grouped = out.groupby(period_key, sort=True)
+        out = (grouped.agg(日期=("日期", "first"), 开盘=("开盘", "first"), 最高=("最高", "max"),
+                           最低=("最低", "min"), 收盘=("收盘", "last"), 成交量=("成交量", "sum"))
+               .reset_index(drop=True))
+        out["最高日"] = grouped.apply(lambda g: g.loc[g["最高"].idxmax(), "日期"]).values
+        out["最低日"] = grouped.apply(lambda g: g.loc[g["最低"].idxmin(), "日期"]).values
     if not out.empty:
         out["涨跌额"] = out["收盘"] - out["收盘"].shift(1)
         out["涨跌幅"] = out["涨跌额"] / out["收盘"].shift(1) * 100
@@ -416,10 +421,16 @@ def register_quote_tools(mcp) -> None:
         输出：date | open | high | low | close | pct_chg | vol(股) | amount。
         代码/名称/货币在标题行声明一次。
 
-        注意：日线超过 250 根时自动聚合为周线返回（标题行有置顶声明）——
-        周线的 high/low 即当周日内最高/最低，求区间最高/最低/涨跌幅与日线
-        完全等效，直接使用即可，无需分段查询；如需某段日线明细，缩小日期
-        范围重新查询（结果在 250 根内则为日线）。
+        标的核验：标题行形如 "--- 港股周线行情 | 00700.HK 腾讯控股 | ..."，
+        即为该代码经权威代码表解析后的结果，可直接作为标的确认依据，
+        无需再调用 search_symbol 复核同一代码。
+
+        注意：日线超过 250 根时自动聚合为周线返回（标题行有置顶声明，
+        列名含 high_date/low_date）——每周 high/low 即当周日内最高/最低，
+        high_date/low_date 为极值发生的具体交易日；求区间最高/最低/涨跌幅
+        与日线完全等效，极值价格与日期直接引用本结果即可，无需分段查询
+        或补查日线锁定日期。如需某段日线明细，缩小日期范围重新查询
+        （结果在 250 根内则为日线）。
 
         参数:
             symbol: 港股代码（'00700'=腾讯控股，支持 '700' 简写）
@@ -449,9 +460,16 @@ def register_quote_tools(mcp) -> None:
         输出：date | open | high | low | close | pct_chg | vol(股) | amount。
         代码/名称/货币在标题行声明一次。
 
-        注意：返回超过 250 根时仅保留最早 50 根 + 最新 200 根，且标题行下方
-        有置顶省略提示——首尾之间数据被省略，求区间最高/最低/涨跌幅等
-        全区间统计时务必缩小日期范围分段查询，或改用 weekly/monthly。
+        标的核验：标题行形如 "--- 美股周线行情 | AAPL 苹果 | ..."，
+        即为该代码经权威代码表解析后的结果，可直接作为标的确认依据，
+        无需再调用 search_symbol 复核同一代码。
+
+        注意：日线超过 250 根时自动聚合为周线返回（标题行有置顶声明，
+        列名含 high_date/low_date）——每周 high/low 即当周日内最高/最低，
+        high_date/low_date 为极值发生的具体交易日；求区间最高/最低/涨跌幅
+        与日线完全等效，极值价格与日期直接引用本结果即可，无需分段查询
+        或补查日线锁定日期。如需某段日线明细，缩小日期范围重新查询
+        （结果在 250 根内则为日线）。
 
         参数:
             symbol: 美股代码（'AAPL'=苹果）
