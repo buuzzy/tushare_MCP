@@ -565,5 +565,106 @@ class NetworkIntegrationTests(unittest.TestCase):
                 self.assertAlmostEqual(expect, r["REPO_AMT"], delta=max(1.0, expect * 0.001))
 
 
+class HkWeeklyMonthlyExactDatesTests(unittest.TestCase):
+    """港股周/月线"日线拉取+本地聚合"回归（极值发生日精确到日）。
+
+    2026-09-20 前端实测 Q1：模型直查 hk_weekly，API 原生周线无极值发生日，
+    统计行/图表只能给周期截止日（2025-10-03），与日线真值（2025-10-02）
+    口径打架。修复后 hk_weekly/hk_monthly 服务端一律走日线聚合。
+    """
+
+    @staticmethod
+    def _daily_df() -> pd.DataFrame:
+        rows = [
+            # 列序与 quote.py 一致：日期, 开盘, 收盘, 最高, 最低, 成交量, 成交额
+            # 第 1 周：最高 100 发生在 01-07，最低 80 发生在 01-06
+            ["2026-01-05", 90, 92, 95, 88, 1000, 90000.0],
+            ["2026-01-06", 92, 85, 94, 80, 1100, 99000.0],
+            ["2026-01-07", 88, 98, 100, 87, 1200, 108000.0],
+            ["2026-01-08", 98, 92, 99, 90, 900, 81000.0],
+            ["2026-01-09", 92, 95, 96, 91, 800, 72000.0],
+            # 第 2 周：最高 120 发生在 01-15，最低 70 发生在 01-13
+            ["2026-01-12", 95, 90, 97, 88, 1000, 90000.0],
+            ["2026-01-13", 90, 75, 92, 70, 1500, 135000.0],
+            ["2026-01-14", 75, 83, 85, 74, 1300, 117000.0],
+            ["2026-01-15", 83, 118, 120, 82, 1600, 144000.0],
+            ["2026-01-16", 118, 112, 119, 110, 900, 81000.0],
+        ]
+        return pd.DataFrame(rows, columns=["日期", "开盘", "收盘", "最高", "最低", "成交量", "成交额"])
+
+    def test_hk_weekly_aggregates_from_daily_with_exact_dates(self):
+        from tools.global_market import quote as quote_module
+
+        calls = []
+
+        def fake_tx(tx_code, period, start, end, adjust):
+            calls.append(period)
+            return self._daily_df(), "腾讯控股"
+
+        with mock.patch.object(quote_module, "_fetch_tx_kline", side_effect=fake_tx), \
+             mock.patch.object(quote_module, "_lookup_name", return_value="腾讯控股"):
+            out = quote_module._hk_kline_impl("weekly", "00700", "20260105", "20260116", "")
+
+        # 数据源必须是日线，绝不能再请求原生周线
+        self.assertTrue(calls, "应至少发起一次日线拉取")
+        self.assertNotIn("weekly", calls)
+        # 极值价格与发生日精确到日
+        self.assertIn("high_date:2026-01-15", out)
+        self.assertIn("low_date:2026-01-13", out)
+        self.assertIn("区间最高 high=120（2026-01-15）", out)
+        self.assertIn("区间最低 low=70（2026-01-13）", out)
+        # 列声明含极值发生日
+        self.assertIn("high,high_date,low,low_date", out)
+
+    def test_hk_weekly_long_window_em_first_tencent_fallback(self):
+        from tools.global_market import quote as quote_module
+
+        def em_fail(*a, **k):
+            raise RuntimeError("em down")
+
+        tx_calls = []
+
+        def fake_tx(tx_code, period, start, end, adjust):
+            tx_calls.append(period)
+            return self._daily_df(), "腾讯控股"
+
+        with mock.patch.object(quote_module, "_fetch_em_kline_hk", side_effect=em_fail), \
+             mock.patch.object(quote_module, "_fetch_tx_kline", side_effect=fake_tx), \
+             mock.patch.object(quote_module, "_lookup_name", return_value="腾讯控股"):
+            out = quote_module._hk_kline_impl("weekly", "00700", "20230101", "20260920", "")
+
+        # EM 失败后降级腾讯"日线"分段，且统计行仍精确到日
+        self.assertEqual(tx_calls, ["daily"])
+        self.assertIn("区间最低 low=70（2026-01-13）", out)
+
+    def test_hk_monthly_aggregates_from_daily(self):
+        from tools.global_market import quote as quote_module
+
+        calls = []
+
+        def fake_tx(tx_code, period, start, end, adjust):
+            calls.append(period)
+            return self._daily_df(), "腾讯控股"
+
+        with mock.patch.object(quote_module, "_fetch_tx_kline", side_effect=fake_tx), \
+             mock.patch.object(quote_module, "_lookup_name", return_value="腾讯控股"):
+            out = quote_module._hk_kline_impl("monthly", "00700", "20260101", "20260131", "")
+
+        self.assertNotIn("monthly", calls)
+        self.assertEqual(calls.count("daily"), 1)
+        self.assertIn("区间最高 high=120（2026-01-15）", out)
+        self.assertIn("区间最低 low=70（2026-01-13）", out)
+
+    def test_hk_weekly_no_data_reports_not_found(self):
+        from tools.global_market import quote as quote_module
+
+        with mock.patch.object(quote_module, "_fetch_tx_kline",
+                               return_value=(pd.DataFrame(), "")), \
+             mock.patch.object(quote_module, "_lookup_name", return_value="00700"):
+            out = quote_module._hk_kline_impl("weekly", "00700", "20260105", "20260116", "")
+
+        self.assertIn("未找到港股周线行情数据", out)
+
+
 if __name__ == "__main__":
     unittest.main()

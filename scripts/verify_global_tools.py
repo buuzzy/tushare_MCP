@@ -73,7 +73,18 @@ CASES = [
     # 上市前区间无数据：错误消息应带候选 hint（suggest 回填中文名）
     ("hk_daily", {"symbol": "02714", "start_date": "20230101", "end_date": "20240101"}, "牧原股份", 0),
     ("hk_weekly", {"symbol": "00700", "start_date": "20260801"}, "| 00700.HK 腾讯控股 |", 4),
-    ("hk_monthly", {"symbol": "00700", "start_date": "20260601"}, "| 00700.HK 腾讯控股 |", 3),
+    # 直查周线极值精确到日（2026-09-20 Q1 前端实测回归：原生周线无极值发生日，
+    # 统计行只能给周期截止日 2025-10-03，与日线真值 2025-10-02 打架；
+    # 修复后 hk_weekly 走日线聚合，极值价格与发生日应与 hk_daily 完全一致）
+    ("hk_weekly", {"symbol": "00700", "start_date": "20230920", "end_date": "20260920"},
+     "区间最高 high=683（2025-10-02）", 150),
+    ("hk_weekly", {"symbol": "00700", "start_date": "20230920", "end_date": "20260920"},
+     "区间最低 low=260.2（2024-01-22）", 150),
+    ("hk_monthly", {"symbol": "00700", "start_date": "20230920", "end_date": "20260920"},
+     "high_date:2025-10-02", 36),
+    # 港股指数周线同款口径（日线聚合出极值发生日）
+    ("global_index_daily", {"symbol": "HSI", "period": "weekly",
+                            "start_date": "20230920", "end_date": "20260920"}, "high_date", 100),
     ("us_daily", {"symbol": "AAPL", "start_date": "20260901"}, "| AAPL ", 7),
     ("us_daily", {"symbol": "SNDK", "start_date": "20260827"}, "| SNDK ", 8),
     ("us_weekly", {"symbol": "AAPL", "start_date": "20260801"}, "| AAPL ", 4),

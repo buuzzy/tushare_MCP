@@ -19,7 +19,7 @@ import pandas as pd
 import requests
 
 from tools.global_market.em_client import em_call, TTL_KLINE
-from tools.global_market.global_formatting import format_kline
+from tools.global_market.global_formatting import _aggregate_kline, format_kline
 from tools.global_market.symbol_resolver import (
     _load_hk_list, _load_us_list, normalize_hk, resolve_index,
     search_symbols,
@@ -291,7 +291,26 @@ def _hk_kline_impl(period: str, symbol: str, start_date: str, end_date: str, adj
     span_days = (dt.date.fromisoformat(end) - dt.date.fromisoformat(start)).days
 
     df, name = pd.DataFrame(), ""
-    if period == "daily" and span_days > _EM_HK_LONG_WINDOW_DAYS:
+    if period in ("weekly", "monthly"):
+        # 周/月线一律走"日线拉取 + 本地聚合"（与美股周/月线同款工程解）：
+        # API 原生周/月线没有极值发生日列，统计行与图表 meta 只能给周期
+        # 截止日，与正文精确发生日口径打架（2026-09-20 前端实测 Q1：
+        # hk_weekly 给 2025-10-03，日线真值 2025-10-02）；本地聚合自带
+        # 最高日/最低日，极值价格与发生日一次给全，模型零补查。
+        if span_days > _EM_HK_LONG_WINDOW_DAYS:
+            # 长窗口：东财单请求日线为主（免多段拼接），失败降级腾讯分段
+            try:
+                df, em_name = _fetch_em_kline_hk(code, start, end, adjust)
+                name = em_name
+            except Exception as e:
+                log_debug(f"[global_kline] EM 长{period}源失败，降级腾讯分段: {type(e).__name__}")
+                df = pd.DataFrame()
+        if df.empty:
+            df, tx_name = _fetch_tx_kline(f"hk{code}", "daily", start, end, adjust)
+            name = name or tx_name
+        if not df.empty:
+            df = _aggregate_kline(df, "W" if period == "weekly" else "M")
+    elif period == "daily" and span_days > _EM_HK_LONG_WINDOW_DAYS:
         # 长窗口日线：东财单请求为主（免多段拼接），失败降级腾讯分段
         try:
             df, em_name = _fetch_em_kline_hk(code, start, end, adjust)
@@ -303,7 +322,7 @@ def _hk_kline_impl(period: str, symbol: str, start_date: str, end_date: str, adj
             df, tx_name = _fetch_tx_kline(f"hk{code}", period, start, end, adjust)
             name = name or tx_name
     else:
-        # 窄窗口（及周/月线）：腾讯为主，失败降级东财
+        # 窄窗口日线：腾讯为主，失败降级东财
         df, tx_name = _fetch_tx_kline(f"hk{code}", period, start, end, adjust)
         name = tx_name
         if df.empty and period == "daily":
@@ -443,13 +462,25 @@ def register_quote_tools(mcp) -> None:
     @mcp.tool()
     @handle_exception
     def hk_weekly(symbol: str, start_date: str = "", end_date: str = "", adjust: str = "") -> str:
-        """获取港股周线行情。参数同 hk_daily（symbol 如 '00700'=腾讯控股）。"""
+        """
+        获取港股周线行情。参数同 hk_daily（symbol 如 '00700'=腾讯控股）。
+
+        服务端已按日线聚合：每周 high/low 为当周日内最高/最低，输出列含
+        high_date/low_date（极值发生的具体交易日），📊 区间统计行的极值
+        价格与日期均已精确到日，直接引用即可，无需再补查日线锁定日期。
+        """
         return _hk_kline_impl("weekly", symbol, start_date, end_date, adjust)
 
     @mcp.tool()
     @handle_exception
     def hk_monthly(symbol: str, start_date: str = "", end_date: str = "", adjust: str = "") -> str:
-        """获取港股月线行情。参数同 hk_daily（symbol 如 '00700'=腾讯控股）。"""
+        """
+        获取港股月线行情。参数同 hk_daily（symbol 如 '00700'=腾讯控股）。
+
+        服务端已按日线聚合：每月 high/low 为当月日内最高/最低，输出列含
+        high_date/low_date（极值发生的具体交易日），📊 区间统计行的极值
+        价格与日期均已精确到日，直接引用即可，无需再补查日线锁定日期。
+        """
         return _hk_kline_impl("monthly", symbol, start_date, end_date, adjust)
 
     @mcp.tool()
@@ -482,13 +513,23 @@ def register_quote_tools(mcp) -> None:
     @mcp.tool()
     @handle_exception
     def us_weekly(symbol: str, start_date: str = "", end_date: str = "", adjust: str = "") -> str:
-        """获取美股周线行情。参数同 us_daily（symbol 如 'AAPL'=苹果）。"""
+        """获取美股周线行情。参数同 us_daily（symbol 如 'AAPL'=苹果）。
+
+        服务端已按日线聚合：输出列含 high_date/low_date（极值发生的具体
+        交易日），📊 区间统计行的极值价格与日期均已精确到日，直接引用即可，
+        无需再补查日线锁定日期。
+        """
         return _us_kline_impl("weekly", symbol, start_date, end_date, adjust)
 
     @mcp.tool()
     @handle_exception
     def us_monthly(symbol: str, start_date: str = "", end_date: str = "", adjust: str = "") -> str:
-        """获取美股月线行情。参数同 us_daily（symbol 如 'AAPL'=苹果）。"""
+        """获取美股月线行情。参数同 us_daily（symbol 如 'AAPL'=苹果）。
+
+        服务端已按日线聚合：输出列含 high_date/low_date（极值发生的具体
+        交易日），📊 区间统计行的极值价格与日期均已精确到日，直接引用即可，
+        无需再补查日线锁定日期。
+        """
         return _us_kline_impl("monthly", symbol, start_date, end_date, adjust)
 
     @mcp.tool()
@@ -520,6 +561,12 @@ def register_quote_tools(mcp) -> None:
         # 港股指数走腾讯；美股指数走新浪（腾讯 fqkline 对 us 前缀区间仅返回 1 根）
         if index_code.startswith("."):
             df = _fetch_us_index_kline(index_code, period, start, end)
+        elif period in ("weekly", "monthly"):
+            # 港股指数周/月线同样走"日线拉取 + 本地聚合"出极值发生日，
+            # 与个股口径一致（原生周/月线无最高日/最低日，见 _hk_kline_impl 注释）
+            df, _ = _fetch_tx_kline(index_code, "daily", start, end, "")
+            if not df.empty:
+                df = _aggregate_kline(df, "W" if period == "weekly" else "M")
         else:
             df, _ = _fetch_tx_kline(index_code, period, start, end, "")
         return format_kline(df, f"{name}{_PERIOD_CN[period]}行情", "点", index_code, name)
