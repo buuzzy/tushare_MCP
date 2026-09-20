@@ -135,9 +135,9 @@ def format_kline(
             agg_note = (
                 f"原始 {total} 根日线超过 250 上限，已自动聚合为 {len(weekly)} 根周线"
                 f"（每周 high/low 为当周日内最高/最低，high_date/low_date 为其发生的"
-                f"具体交易日；求区间最高/最低/涨跌幅与日线完全等效，极值价格与日期"
-                f"直接引用本结果即可，无需分段或补查日线）；如需某段日线明细，"
-                f"请缩小日期范围重新查询。"
+                f"具体交易日；求区间最高/最低/涨跌幅与日线完全等效，区间极值见下方"
+                f"📊 区间统计行，直接引用即可，无需自行扫描或分段补查）；如需某段"
+                f"日线明细，请缩小日期范围重新查询。"
             )
         else:
             monthly = _aggregate_kline(df, "M")
@@ -147,8 +147,8 @@ def format_kline(
                 agg_note = (
                     f"原始 {total} 根日线超过上限，已自动聚合为 {len(monthly)} 根月线"
                     f"（每月 high/low 为当月日内最高/最低，high_date/low_date 为其发生的"
-                    f"具体交易日；求区间最高/最低/涨跌幅与日线等效，极值价格与日期"
-                    f"直接引用本结果即可）。"
+                    f"具体交易日；求区间最高/最低/涨跌幅与日线等效，区间极值见下方"
+                    f"📊 区间统计行，直接引用即可）。"
                 )
             else:
                 # 极端长历史（26 年+月线仍超限）：退回首尾截断
@@ -189,6 +189,23 @@ def format_kline(
     if agg_note:
         # 置顶提示：紧跟标题行，Agent 首先看到的就是它
         lines.append(f"... ⚠️ {agg_note}")
+
+    # 区间统计行：极值扫描是代码该干的活，不该让模型扫 157 行文本
+    # （2026-09-20 实测：模型扫描周线漏掉 2025-10-03 周的 high=683，
+    # 把区间最高答成 664.5——聚合数据里明明有这行）。服务端直接算好，
+    # 模型引用即可；截断场景下中间被省略段的极值也能被统计到。
+    if "最高" in agg_df.columns and "最低" in agg_df.columns and len(agg_df) > 0:
+        hi_row = agg_df.loc[agg_df["最高"].idxmax()]
+        lo_row = agg_df.loc[agg_df["最低"].idxmin()]
+        hi_date = hi_row["最高日"] if "最高日" in agg_df.columns and pd.notna(hi_row.get("最高日")) else hi_row["日期"]
+        lo_date = lo_row["最低日"] if "最低日" in agg_df.columns and pd.notna(lo_row.get("最低日")) else lo_row["日期"]
+        last_close = _fmt_value("close", agg_df["收盘"].iloc[-1]) if "收盘" in agg_df.columns else "N/A"
+        lines.append(
+            f"... 📊 区间统计（服务端已计算，直接引用即可，无需自行扫描或补查）："
+            f"区间最高 high={_fmt_value('high', hi_row['最高'])}（{hi_date}）；"
+            f"区间最低 low={_fmt_value('low', lo_row['最低'])}（{lo_date}）；"
+            f"最新 {agg_df['日期'].iloc[-1]} 收 {last_close}。"
+        )
 
     if fallback_truncate:
         head_n = min(_TRUNCATE_HEAD_N, per_code_limit)

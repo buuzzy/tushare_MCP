@@ -366,7 +366,11 @@ class FormattingTests(unittest.TestCase):
         out = format_kline(df, "港股日线行情", "港元", "02714.HK", "牧原股份")
         self.assertIn("港股周线行情", out)                     # 标题已改为周线
         self.assertIn("已自动聚合", out)                       # 置顶声明等效性
-        self.assertIn("无需分段或补查日线", out)
+        self.assertIn("无需自行扫描或分段补查", out)
+        # 服务端极值统计行（模型直接引用，杜绝扫描漏行）
+        self.assertIn("区间统计（服务端已计算", out)
+        self.assertIn("区间最高 high=99（2026-04-10）", out)
+        self.assertIn("区间最低 low=11（2026-07-19）", out)
         self.assertNotIn("中间省略", out)                      # 不再截断
         self.assertIn("high:99", out)                          # 周内极值保留
         self.assertIn("low:11", out)
