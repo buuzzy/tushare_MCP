@@ -297,6 +297,46 @@ def _normalize_kline_adjust(adjust: str) -> str:
     return adjust if adjust in ("qfq", "hfq", "") else "qfq"
 
 
+def _fetch_sina_kline_hk(code: str, adjust: str) -> pd.DataFrame:
+    """港股 K 线（新浪源，全历史一次拉取 + 缓存，本地过滤日期）。
+
+    2026-09-21 港股复权口径修复：腾讯源不支持复权、东财 push2his 对港股
+    fqt=1 实测无效（腾讯 00700 在两者下 2014-05-15 拆股日均留 -78.8% 假
+    断崖，历史价未 ÷5 回溯，跨拆股日的振幅/分位/涨幅统计全部失真）。
+    新浪 stock_hk_daily 的 qfq 为真复权（独立因子文件，价格×因子，因子含
+    分红折算；实测 8 标的复权连续性扫描 7 干净 + 2 处真实行情跳变；唯一
+    已知个案：汇丰 00005 在 1999-07-05（1拆3）之前深史偏差 ×3，2005 年后
+    无影响，由 format_kline 断崖检测兜底声明）。仅服务 qfq/hfq；不复权
+    口径（真实牌价）仍走腾讯/东财。
+    """
+    import akshare as ak
+
+    df = em_call(
+        "sina_quote",
+        lambda: ak.stock_hk_daily(symbol=code, adjust=adjust),
+        cache_key=f"hk_kl_sina:{code}:{adjust}",
+        ttl_seconds=TTL_KLINE,
+    )
+    if df is None or df.empty:
+        return pd.DataFrame()
+    out = pd.DataFrame({
+        "日期": df["date"].astype(str),
+        "开盘": pd.to_numeric(df["open"], errors="coerce"),
+        "最高": pd.to_numeric(df["high"], errors="coerce"),
+        "最低": pd.to_numeric(df["low"], errors="coerce"),
+        "收盘": pd.to_numeric(df["close"], errors="coerce"),
+        "成交量": pd.to_numeric(df["volume"], errors="coerce"),
+    })
+    if "amount" in df.columns:
+        out["成交额"] = pd.to_numeric(df["amount"], errors="coerce")
+    out = out.dropna(subset=["收盘"]).sort_values("日期").reset_index(drop=True)
+    if out.empty:
+        return out
+    out["涨跌额"] = out["收盘"] - out["收盘"].shift(1)
+    out["涨跌幅"] = out["涨跌额"] / out["收盘"].shift(1) * 100
+    return out
+
+
 def _hk_kline_impl(period: str, symbol: str, start_date: str, end_date: str, adjust: str) -> str:
     log_debug(f"[global_kline] HK/{period} symbol='{symbol}'")
     if not symbol:
@@ -309,7 +349,18 @@ def _hk_kline_impl(period: str, symbol: str, start_date: str, end_date: str, adj
     span_days = (dt.date.fromisoformat(end) - dt.date.fromisoformat(start)).days
 
     df, name = pd.DataFrame(), ""
-    if period in ("weekly", "monthly"):
+    sina_used = False
+    if adjust in ("qfq", "hfq"):
+        # 复权口径一律新浪主源（腾讯/东财港股不复权，详见 _fetch_sina_kline_hk）
+        try:
+            df = _fetch_sina_kline_hk(code, adjust)
+            sina_used = not df.empty
+            if sina_used:
+                df = df[(df["日期"] >= start) & (df["日期"] <= end)]
+        except Exception as e:
+            log_debug(f"[global_kline] sina 港股源失败，降级腾讯/东财: {type(e).__name__}")
+            df = pd.DataFrame()
+    if not sina_used and period in ("weekly", "monthly"):
         # 周/月线一律走"日线拉取 + 本地聚合"（与美股周/月线同款工程解）：
         # API 原生周/月线没有极值发生日列，统计行与图表 meta 只能给周期
         # 截止日，与正文精确发生日口径打架（2026-09-20 前端实测 Q1：
@@ -328,7 +379,7 @@ def _hk_kline_impl(period: str, symbol: str, start_date: str, end_date: str, adj
             name = name or tx_name
         if not df.empty:
             df = _aggregate_kline(df, "W" if period == "weekly" else "M")
-    elif period == "daily" and span_days > _EM_HK_LONG_WINDOW_DAYS:
+    elif not sina_used and period == "daily" and span_days > _EM_HK_LONG_WINDOW_DAYS:
         # 长窗口日线：东财单请求为主（免多段拼接），失败降级腾讯分段
         try:
             df, em_name = _fetch_em_kline_hk(code, start, end, adjust)
@@ -339,7 +390,7 @@ def _hk_kline_impl(period: str, symbol: str, start_date: str, end_date: str, adj
         if df.empty:
             df, tx_name = _fetch_tx_kline(f"hk{code}", period, start, end, adjust)
             name = name or tx_name
-    else:
+    elif not sina_used:
         # 窄窗口日线：腾讯为主，失败降级东财
         df, tx_name = _fetch_tx_kline(f"hk{code}", period, start, end, adjust)
         name = tx_name
@@ -350,6 +401,17 @@ def _hk_kline_impl(period: str, symbol: str, start_date: str, end_date: str, adj
             except Exception as e:
                 log_debug(f"[global_kline] EM 备源失败: {type(e).__name__}")
                 df = pd.DataFrame()
+    if sina_used and period in ("weekly", "monthly") and not df.empty:
+        # 新浪主源的周/月线同样本地聚合（自带极值发生日，口径与降级路径一致）
+        df = _aggregate_kline(df, "W" if period == "weekly" else "M")
+    if sina_used and not name:
+        # 新浪源不返回名称，从代码表补齐（失败不影响主流程）
+        try:
+            rows = search_symbols(code, market="hk", limit=1)
+            if rows and rows[0].get("name") and rows[0]["name"] != code:
+                name = rows[0]["name"]
+        except Exception as e:
+            log_debug(f"[global_kline] sina 名称补齐失败: {type(e).__name__}")
     name = name or _lookup_name("HK", code)
     if df.empty:
         hint = ""

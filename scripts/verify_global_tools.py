@@ -81,11 +81,13 @@ CASES = [
     # 修复后 hk_weekly 走日线聚合，极值价格与发生日应与 hk_daily 完全一致）
     ("hk_weekly", {"symbol": "00700", "start_date": "20230920", "end_date": "20260920"},
      "区间最高 high=", 150),
-    # qfq 口径：价格随源（腾讯/东财）与未来除权漂移，只锁极值发生日与口径声明
+    # qfq 口径（2026-09-21 港股主源切新浪）：价格随未来除权漂移，只锁极值
+    # 发生日与当前 qfq 值（新源复权价 = 牌价×新浪因子，含分红折算，低于旧
+    # 腾讯/东财"伪 qfq"≈不复权值）
     ("hk_weekly", {"symbol": "00700", "start_date": "20230920", "end_date": "20260920"},
-     "区间最高 high=677.7（2025-10-02）", 0),
+     "区间最高 high=675.1341（2025-10-02）", 0),
     ("hk_weekly", {"symbol": "00700", "start_date": "20230920", "end_date": "20260920"},
-     "区间最低 low=247（2024-01-22）", 0),
+     "区间最低 low=252.7939（2024-01-22）", 0),
     # 不复权显式传 adjust=''：锁定不复权真值（不随除权漂移）
     ("hk_weekly", {"symbol": "00700", "start_date": "20230920", "end_date": "20260920", "adjust": ""},
      "区间最高 high=683（2025-10-02）", 150),
@@ -93,6 +95,12 @@ CASES = [
      "区间最低 low=260.2（2024-01-22）", 150),
     ("hk_monthly", {"symbol": "00700", "start_date": "20230920", "end_date": "20260920"},
      "high_date:2025-10-02", 36),
+    # 2014-05-15 腾讯 1拆5（复权主源切换回归）：不复权口径断崖真实存在，
+    # 断崖检测兜底声明必须出现，防模型把拆股当暴跌（Q5 实锤）
+    ("hk_daily", {"symbol": "00700", "start_date": "20140514", "end_date": "20140516", "adjust": ""},
+     "疑似公司行动跳变", 3),
+    # 新浪 qfq 覆盖回归：汇丰（1998 起深史）短窗口正常出数
+    ("hk_daily", {"symbol": "00005", "start_date": "20260901"}, "| 00005.HK 汇丰控股 |", 5),
     # 港股指数周线同款口径（日线聚合出极值发生日）
     ("global_index_daily", {"symbol": "HSI", "period": "weekly",
                             "start_date": "20230920", "end_date": "20260920"}, "high_date", 100),
@@ -139,6 +147,17 @@ CASES = [
      "已自动聚合为周线全史", 100, "astock"),
     ("fund_nav", {"ts_code": "001102.OF", "start_date": "20240920", "end_date": "20260920"},
      "📊 区间统计（服务端已计算", 0, "astock"),
+]
+
+# 负断言用例：(工具, 参数, 禁止出现的子串)。港股复权主源切新浪（2026-09-21）
+# 的核心回归：qfq 下腾讯 2014-05-15 1拆5 的 -78.8% 假断崖必须根除。
+FORBID_CASES = [
+    ("hk_daily", {"symbol": "00700", "start_date": "20140510", "end_date": "20140520", "adjust": "qfq"},
+     "pct_chg:-78"),
+    ("hk_daily", {"symbol": "00700", "start_date": "20060901", "adjust": "qfq"},
+     "pct_chg:-78"),
+    ("hk_monthly", {"symbol": "00700", "start_date": "20060901", "adjust": "qfq"},
+     "pct_chg:-78"),
 ]
 
 def _case_category(case) -> str:
@@ -202,6 +221,25 @@ async def verify(url: str, url_is_remote: bool = False) -> int:
                     else:
                         first = text.split("\n")[1] if "\n" in text else text
                         print(f"  PASS  {tool}: {first[:100]}")
+                        passed += 1
+                except Exception as e:
+                    print(f"  FAIL  {tool}{args}: {type(e).__name__}: {str(e)[:100]}")
+                    failed += 1
+            # 负断言：禁止出现的子串（如复权口径下的假断崖）
+            cases = FORBID_CASES if url_is_remote else [c for c in FORBID_CASES if _case_category(c) == "global"]
+            for tool, args, forbid in cases:
+                if tool not in names:
+                    print(f"  SKIP  {tool}: not registered")
+                    failed += 1
+                    continue
+                try:
+                    result = await session.call_tool(tool, args)
+                    text = "".join(getattr(c, "text", "") for c in result.content)
+                    if result.isError or forbid in text:
+                        print(f"  FAIL  {tool}{args}: '{forbid}' {'isError' if result.isError else '不应出现却出现'}")
+                        failed += 1
+                    else:
+                        print(f"  PASS  {tool}: 无 '{forbid}'")
                         passed += 1
                 except Exception as e:
                     print(f"  FAIL  {tool}{args}: {type(e).__name__}: {str(e)[:100]}")

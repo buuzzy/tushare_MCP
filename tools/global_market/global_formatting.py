@@ -207,6 +207,30 @@ def format_kline(
             f"最新 {agg_df['日期'].iloc[-1]} 收 {last_close}。"
         )
 
+    # 断崖检测兜底（2026-09-21）：复权缺失/复权因子缺口会让拆股日留下
+    # ±n 倍假跳变（腾讯 00700 未复权 -78.8%、汇丰 qfq 深史个案 +208%），
+    # 模型会据此编造"暴跌/拆股"叙事（Q5 实锤）。40% 阈值在正常行情中极
+    # 罕见（2022-03-16 中概暴涨 +36% 也不触发），命中即在统计行后声明，
+    # 防模型把跳变当真实行情或跨跳变下结论。
+    corp_action_note = ""
+    if "收盘" in df.columns and len(df) > 1:
+        try:
+            _pct = df["收盘"].astype(float).pct_change()
+            _jumps = df[_pct.abs() > 0.40]
+            if not _jumps.empty:
+                _samples = "; ".join(
+                    f"{row['日期']}（{_pct.iloc[i] * 100:+.1f}%）"
+                    for i, row in _jumps.head(3).iterrows()
+                )
+                corp_action_note = (
+                    f"\n... ⚠️ 区间内检测到 {len(_jumps)} 处疑似公司行动跳变"
+                    f"（单日涨跌幅超±40%）：{_samples}。跳变可能是拆合股/复权"
+                    f"缺口，也可能是极端行情；跨跳变日期的价格比较、区间涨跌幅"
+                    f"与振幅统计不可比，相关结论请分段使用或与用户确认口径。"
+                )
+        except Exception:
+            pass
+
     if fallback_truncate:
         head_n = min(_TRUNCATE_HEAD_N, per_code_limit)
         tail_n = per_code_limit - head_n
@@ -222,7 +246,7 @@ def format_kline(
     else:
         for _, row in agg_df.iterrows():
             lines.append(_bar_line(row))
-    return "\n".join(lines)
+    return "\n".join(lines) + corp_action_note
 
 
 def format_indicator(

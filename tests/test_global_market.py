@@ -666,5 +666,119 @@ class HkWeeklyMonthlyExactDatesTests(unittest.TestCase):
         self.assertIn("未找到港股周线行情数据", out)
 
 
+class SinaHkPrimarySourceTests(unittest.TestCase):
+    """港股复权主源切新浪（2026-09-21）。
+
+    背景：腾讯源不支持复权、东财 push2his 港股 fqt=1 实测无效，00700 拆股
+    日（2014-05-15，1拆5）在两者下均留 -78.8% 假断崖。qfq/hfq 一律新浪
+    主源；adjust=''（真实牌价）保留腾讯/东财；format_kline 加 ±40% 断崖
+    检测兜底声明。
+    """
+
+    @staticmethod
+    def _sina_df():
+        return pd.DataFrame({
+            "date": ["2014-05-12", "2014-05-13", "2014-05-14"],
+            "open": [83.4511, 88.8295, 89.6102],
+            "high": [88.0487, 90.0439, 89.6102],
+            "low": [83.2776, 87.5282, 86.5393],
+            "close": [87.4415, 88.0487, 89.1764],
+            "volume": [8631429, 5444083, 4010970],
+            "amount": [4309975198.0, 2789049108.0, 2043458742.0],
+        })
+
+    def test_sina_kline_column_mapping(self):
+        from tools.global_market import quote
+
+        with mock.patch("akshare.stock_hk_daily", return_value=self._sina_df()):
+            df = quote._fetch_sina_kline_hk("00700", "qfq")
+
+        self.assertEqual(list(df["日期"]), ["2014-05-12", "2014-05-13", "2014-05-14"])
+        self.assertAlmostEqual(df["收盘"].iloc[0], 87.4415)
+        self.assertIn("成交额", df.columns)
+        self.assertIn("涨跌幅", df.columns)  # 自算涨跌幅
+        self.assertAlmostEqual(df["涨跌幅"].iloc[1], (88.0487 / 87.4415 - 1) * 100, places=4)
+
+    def test_hk_impl_qfq_uses_sina(self):
+        from tools.global_market import quote
+
+        sina_df = pd.DataFrame({
+            "日期": ["2014-05-12", "2014-05-13", "2014-05-14"],
+            "开盘": [83.4511] * 3, "最高": [90.0439] * 3,
+            "最低": [83.2776] * 3, "收盘": [87.4415, 88.0487, 89.1764],
+            "成交量": [1.0] * 3, "涨跌幅": [0.0, 0.7, 1.3],
+        })
+        calls = {}
+
+        def fail_tx(*a, **k):
+            calls["tx"] = True
+            return pd.DataFrame(), ""
+
+        with mock.patch.object(quote, "_fetch_sina_kline_hk", return_value=sina_df), \
+             mock.patch.object(quote, "_fetch_tx_kline", side_effect=fail_tx), \
+             mock.patch.object(quote, "search_symbols", return_value=[{"code": "00700", "name": "腾讯控股"}]):
+            out = quote._hk_kline_impl("daily", "00700", "20140510", "20140520", "qfq")
+
+        self.assertNotIn("tx", calls)          # 复权口径不应再碰腾讯源
+        self.assertIn("87.4415", out)          # 数据来自新浪
+        self.assertIn("腾讯控股", out)          # 名称从代码表补齐
+
+    def test_hk_impl_qfq_falls_back_on_sina_failure(self):
+        from tools.global_market import quote
+
+        tx_df = pd.DataFrame({
+            "日期": ["2014-05-15"], "开盘": [110.0], "最高": [112.0],
+            "最低": [107.9], "收盘": [108.8], "成交量": [51693834.0],
+        })
+
+        with mock.patch.object(quote, "_fetch_sina_kline_hk",
+                               side_effect=RuntimeError("sina down")), \
+             mock.patch.object(quote, "_fetch_tx_kline", return_value=(tx_df, "腾讯控股")):
+            out = quote._hk_kline_impl("daily", "00700", "20140515", "20140515", "qfq")
+
+        self.assertIn("108.8", out)            # 降级成功，数据来自腾讯
+
+    def test_hk_impl_unadjusted_skips_sina(self):
+        from tools.global_market import quote
+
+        calls = {}
+        real_sina = quote._fetch_sina_kline_hk
+
+        def spy(*a, **k):
+            calls["sina"] = True
+            return real_sina(*a, **k)
+
+        tx_df = pd.DataFrame({
+            "日期": ["2014-05-15"], "开盘": [110.0], "最高": [112.0],
+            "最低": [107.9], "收盘": [108.8], "成交量": [51693834.0],
+        })
+
+        with mock.patch.object(quote, "_fetch_sina_kline_hk", side_effect=spy), \
+             mock.patch.object(quote, "_fetch_tx_kline", return_value=(tx_df, "腾讯控股")):
+            out = quote._hk_kline_impl("daily", "00700", "20140515", "20140515", "")
+
+        self.assertNotIn("sina", calls)        # 不复权（真实牌价）不走新浪
+        self.assertIn("108.8", out)
+
+    def test_format_kline_corp_action_note(self):
+        df = pd.DataFrame({
+            "日期": ["2020-01-02", "2020-01-03", "2020-01-06"],
+            "开盘": [100.0, 100.0, 20.0], "最高": [101.0, 101.0, 21.0],
+            "最低": [99.0, 99.0, 19.0], "收盘": [100.0, 100.5, 20.1],
+            "成交量": [1000.0, 1000.0, 5000.0],
+        })
+        out = format_kline(df, "港股日线行情", "港元", "00005.HK", "测试")
+        self.assertIn("疑似公司行动跳变", out)
+        self.assertIn("2020-01-06", out)       # -80% 跳变日被点名
+        # 无跳变时不应出现声明
+        calm = df.copy()
+        calm["收盘"] = [100.0, 100.5, 101.0]
+        calm["开盘"] = [100.0, 100.5, 101.0]
+        calm["最高"] = [101.0, 101.0, 102.0]
+        calm["最低"] = [99.0, 100.0, 100.0]
+        out2 = format_kline(calm, "港股日线行情", "港元", "00005.HK", "测试")
+        self.assertNotIn("疑似公司行动跳变", out2)
+
+
 if __name__ == "__main__":
     unittest.main()
