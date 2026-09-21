@@ -49,13 +49,15 @@ def downsample_weekly_last(
     日线 + 追加降采样块"会混频出时间倒错的图表。因此长区间时**整段**改为
     周频全史：每列取周内最新有效值，日期取周内最大交易日。
 
-    len(df) <= threshold 原样返回 (df, "")；超限先按周（约 /5），周频仍超
-    threshold 再按月。返回 (降采样df, 频率"周"/"月"或"")。
+    len(df) <= threshold 原样返回 (df, "")；超限按周降采样（约 /5）。周频
+    结果超过 250（硬上限，与港美股 K 线一致）才继续降为月频——三年日线
+    周频约 157 条，精度优于月频 37 条，不应过度降采样。返回 (df, 频率)。
     """
     if df is None or df.empty or len(df) <= threshold or date_col not in df.columns:
         return df, ""
     dts = pd.to_datetime(df[date_col].astype(str), errors="coerce")
     order = df.assign(__dt=dts).sort_values("__dt")
+    out = df
     for freq_key, freq_name in (("W-SUN", "周"), ("M", "月")):
         key = order["__dt"].dt.to_period(freq_key).astype(str)
         grouped = order.groupby(key, sort=True)
@@ -64,6 +66,6 @@ def downsample_weekly_last(
             if col in order.columns:
                 data[col] = grouped[col].last()
         out = pd.DataFrame(data).reset_index(drop=True)
-        if len(out) <= threshold:
+        if len(out) <= 250:
             return out, freq_name
     return out, "月"

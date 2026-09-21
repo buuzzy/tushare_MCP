@@ -58,12 +58,19 @@ class DownsampleWeeklyLastTests(unittest.TestCase):
         expected_close = df.loc[dts.dt.to_period("W-SUN").astype(str) == last_week, "close"].iloc[-1]
         self.assertEqual(out["close"].iloc[-1], expected_close)
 
-    def test_weekly_overflow_falls_back_to_monthly(self):
-        # ~3 年日线：周频约 157 条 > 120 阈值 -> 月频
+    def test_weekly_under_hard_cap_stays_weekly(self):
+        # 3 年日线：周频约 157 条 <= 250 硬上限，保持周频（精度优于月频 37 条）
         df = pd.DataFrame(_make_daily_rows(725, start="20230921"))
         out, freq = downsample_weekly_last(df, "trade_date", ["close"], threshold=120)
+        self.assertEqual(freq, "周")
+        self.assertLessEqual(len(out), 250)
+
+    def test_weekly_overflow_falls_back_to_monthly(self):
+        # ~6.5 年日线：周频约 330 条 > 250 硬上限 -> 月频
+        df = pd.DataFrame(_make_daily_rows(1600, start="20200321"))
+        out, freq = downsample_weekly_last(df, "trade_date", ["close"], threshold=120)
         self.assertEqual(freq, "月")
-        self.assertLessEqual(len(out), 120)
+        self.assertLessEqual(len(out), 250)
 
 
 class DailyBasicChartSupplyTests(unittest.TestCase):
