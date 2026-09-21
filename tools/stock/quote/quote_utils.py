@@ -353,6 +353,44 @@ def _interval_stats_line(sub: pd.DataFrame, code: str | None) -> str | None:
     return f"... {STATS_PREFIX}{tag}" + "；".join(parts)
 
 
+def _long_window_display(df: pd.DataFrame, period: str) -> tuple[pd.DataFrame, str]:
+    """长窗口图表供给：单代码行数超限时自动聚合，图表拿到全史。
+
+    与港美股 format_kline 同款策略（2026-09-21 Q3 实测：A股日线 725 行
+    只显示尾部 50 条，图表"标题近三年、图上近 50 天"）。日线超 250 聚
+    周线，周线仍超聚月线；周线工具超 250 直接聚月线。聚合复用
+    _aggregate_stock_daily（复权后聚合，附 high_date/low_date 极值日）。
+    返回 (展示df, 置顶提示)；无需聚合返回 (原df, "")。
+    """
+    if "ts_code" not in df.columns or df.empty:
+        return df, ""
+    parts: list[pd.DataFrame] = []
+    freq = ""
+    for code in df["ts_code"].dropna().unique():
+        sub = df[df["ts_code"] == code]
+        if len(sub) <= 250:
+            parts.append(sub)
+            continue
+        target = "weekly" if period == "daily" else "monthly"
+        agg = _aggregate_stock_daily(sub, target)
+        if len(agg) > 250 and target == "weekly":
+            agg = _aggregate_stock_daily(sub, "monthly")
+            freq = "月"
+        else:
+            freq = freq or "周"
+        parts.append(agg)
+    if not freq:
+        return df, ""
+    out = pd.concat(parts, ignore_index=True)
+    note = (
+        f"原始数据单代码超过 250 根，已自动聚合为{freq}线全史共 {{n}} 条（每周/月 high/low 为期内日内极值，"
+        f"high_date/low_date 为极值发生日，求区间最高/最低/涨跌幅与日线完全等效；"
+        f"📊 区间统计行按原始数据计算，精度到日）。图表绘制区间走势直接用本数据；"
+        f"如需日线明细，请缩小日期范围重新查询。"
+    )
+    return out, note.replace("{n}", str(len(out)))
+
+
 def format_quote_data(
     df: pd.DataFrame, period: str, requested_codes: Iterable[str], adjust: str = ""
 ) -> str:
@@ -369,10 +407,20 @@ def format_quote_data(
     else:
         effective = normalize_adjust(adjust)
     adjust_suffix = {"qfq": "，前复权", "hfq": "，后复权"}.get(effective, "")
-    display_df = _select_display_rows(df, requested_codes, per_code_limit=50)
+    # 长窗口图表供给：单代码超 250 根自动聚合成全史周/月线（港美股同款），
+    # 聚合结果整段输出（不再套 50 条显示上限，否则图表又只剩尾部）
+    display_source, long_note = _long_window_display(df, period)
+    if long_note:
+        display_df = display_source.sort_values(["ts_code", "trade_date"]).reset_index(drop=True)
+    else:
+        display_df = _select_display_rows(display_source, requested_codes, per_code_limit=50)
     requested_code_list = list(requested_codes)
 
     results = [f"--- {period_name}行情数据 (Total: {len(df)}{adjust_suffix}) ---"]
+    if long_note:
+        results.append(
+            f"... ⚠️ 已聚合展示 {len(display_df)} 条。{long_note}"
+        )
     for _, row in display_df.iterrows():
         info = []
         if pd.notna(row.get("trade_date")):
@@ -413,8 +461,8 @@ def format_quote_data(
         if missing_codes:
             results.append("未找到代码:" + ",".join(missing_codes))
 
-    if len(display_df) < len(df):
-        results.append(f"... (共 {len(df)} 条，每个代码仅显示最近 50 条)")
+    if len(display_df) < len(display_source):
+        results.append(f"... (共 {len(display_source)} 条，每个代码仅显示最近 50 条)")
 
     # 区间统计：极值扫描是代码该干的活（同款事故见 tools/stats_utils.py 注释）。
     # 对全量 df 计算——截断场景下未显示行的极值也能统计到。

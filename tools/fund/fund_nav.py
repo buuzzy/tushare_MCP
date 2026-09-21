@@ -1,7 +1,10 @@
 import pandas as pd
 from utils.logger import log_debug, handle_exception
 from utils.token_manager import get_pro_client
-from tools.stats_utils import STATS_PREFIX, extremes_with_dates, fmt_num
+from tools.stats_utils import STATS_PREFIX, downsample_weekly_last, extremes_with_dates, fmt_num
+
+# 时间序列长窗口降采样阈值（与 daily_basic 同款图表供给工程解）
+_FUND_NAV_THRESHOLD = 120
 
 def register_fund_nav_tools(mcp):
     @mcp.tool()
@@ -76,9 +79,37 @@ def register_fund_nav_tools(mcp):
             df = df.sort_values(by='nav_date', ascending=False)
 
         display_cap = 50
-        
+
+        # 长窗口图表供给工程解：单基金时间序列超过阈值时整段降采样为
+        # 周频全史（每列取周内最新值），替换"头45+尾5中间省略"——后者
+        # 会让图表出现时间倒错（2026-09-21 daily_basic 同款缺口）。
+        downsampled = ""
+        df_full = df  # 区间统计始终对全量原始数据计算
+        if (
+            not is_cross_section
+            and not limit
+            and len(df) > _FUND_NAV_THRESHOLD
+            and "nav_date" in df.columns
+        ):
+            nav_cols = [c for c in ("unit_nav", "accum_nav", "adj_nav", "net_asset") if c in df.columns]
+            ds_df, freq = downsample_weekly_last(
+                df, "nav_date", nav_cols, threshold=_FUND_NAV_THRESHOLD
+            )
+            if freq:
+                downsampled = (
+                    f"原始 {len(df)} 条净值记录超过显示上限，已自动降采样为 {len(ds_df)} 条{freq}频"
+                    f"（每列取{freq}内最新值，区间走势图表直接用本数据绘制即可；"
+                    f"📊 区间统计行仍按全量数据计算）。如需每日净值明细，请缩小日期范围重新查询。"
+                )
+                df = ds_df
+
         # Smart Truncation Logic for Time Series
-        if not limit and len(df) > display_cap and not is_cross_section:
+        if downsampled:
+            result[0] = f"--- size: {len(df)} ---"
+            result.append(f"... ⚠️ {downsampled}")
+            for _, row in df.iterrows():
+                result.append(format_row(row))
+        elif not limit and len(df) > display_cap and not is_cross_section:
             head_df = df.head(45)
             tail_df = df.tail(5)
             
@@ -104,14 +135,14 @@ def register_fund_nav_tools(mcp):
                  result.append(f"... (共 {len(df)} 条，仅显示前 {display_cap} 条)")
 
         # 区间统计：净值极值由代码计算（截断场景下被省略段的极值也能统计到）。
-        # 仅时间序列场景输出；多基金时按代码分行。统计范围即本次返回的 df。
+        # 仅时间序列场景输出；多基金时按代码分行。统计范围即全量原始 df。
         if not is_cross_section:
-            value_col = "adj_nav" if "adj_nav" in df.columns else ("unit_nav" if "unit_nav" in df.columns else None)
-            if value_col and "nav_date" in df.columns:
+            value_col = "adj_nav" if "adj_nav" in df_full.columns else ("unit_nav" if "unit_nav" in df_full.columns else None)
+            if value_col and "nav_date" in df_full.columns:
                 groups = (
-                    [(code, df[df["ts_code"] == code]) for code in df["ts_code"].dropna().unique()]
-                    if "ts_code" in df.columns and not df["ts_code"].dropna().empty
-                    else [("", df)]
+                    [(code, df_full[df_full["ts_code"] == code]) for code in df_full["ts_code"].dropna().unique()]
+                    if "ts_code" in df_full.columns and not df_full["ts_code"].dropna().empty
+                    else [("", df_full)]
                 )
                 for code, sub in groups:
                     ext = extremes_with_dates(sub, "nav_date", value_col)

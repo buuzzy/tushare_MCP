@@ -131,6 +131,14 @@ CASES = [
     # 指数不受复权影响：标题行不得出现前复权声明
     ("daily", {"ts_code": "000300.SH", "start_date": "20260901"},
      "000300.SH", 5, "astock"),
+    # ---- 图表供给工程解（2026-09-21 Q3 实测回归，category="astock"）----
+    # 长区间整段降采样/聚合为全史周频：图表数据必须覆盖完整区间
+    ("daily_basic", {"ts_code": "600519.SH", "start_date": "20230920", "end_date": "20260920"},
+     "已自动降采样", 100, "astock"),
+    ("daily", {"ts_code": "600519.SH", "start_date": "20230920", "end_date": "20260920"},
+     "已自动聚合为周线全史", 100, "astock"),
+    ("fund_nav", {"ts_code": "001102.OF", "start_date": "20240920", "end_date": "20260920"},
+     "📊 区间统计（服务端已计算", 0, "astock"),
 ]
 
 def _case_category(case) -> str:
