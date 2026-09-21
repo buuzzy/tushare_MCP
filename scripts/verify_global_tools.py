@@ -3,6 +3,8 @@
 用法:
     本地:  .venv/bin/python scripts/verify_global_tools.py
     线上:  .venv/bin/python scripts/verify_global_tools.py --url https://minishare-mcp-production.up.railway.app/sse
+    线上smoke: ... --url ... --smoke   # 仅核心极值真值 + 断崖负例（部署后快速验收）
+                                     # 全量回归仍在本地跑（2026-09-21 减负归并）
 
 本地运行说明：若未安装私有 SDK（tinyshare/minishare），脚本生成 sitecustomize
 stub 后以 --category global 启动子进程 server，再经 SSE 逐工具调用（仅执行
@@ -160,6 +162,25 @@ FORBID_CASES = [
      "pct_chg:-78"),
 ]
 
+# smoke 用例（--smoke，2026-09-21）：线上部署后的快速验收集，只锁三类
+# 不可退让的真值——搜索/行情可用性、qfq 极值发生日、断崖声明。全部为
+# global 类别（本地模式同样可跑）；FORBID_CASES 在 smoke 下全量保留。
+SMOKE_CASES = [
+    ("search_symbol", {"query": "00700"}, "00700", 0),
+    ("hk_daily", {"symbol": "00700", "start_date": "20260901"}, "| 00700.HK 腾讯控股 |", 8),
+    # 分页聚合可用性：默认 3 年窗口必须拉全（~157 根周线）
+    ("hk_daily", {"symbol": "00700"}, "| 00700.HK 腾讯控股 |", 150),
+    # qfq 极值真值锁日期与价格
+    ("hk_weekly", {"symbol": "00700", "start_date": "20230920", "end_date": "20260920"},
+     "区间最高 high=675.1341（2025-10-02）", 0),
+    # 断崖声明：不复权口径下拆股跳变必须附公司行动声明
+    ("hk_daily", {"symbol": "00700", "start_date": "20140514", "end_date": "20140516", "adjust": ""},
+     "疑似公司行动跳变", 3),
+    # 美股 qfq 极值发生日
+    ("us_daily", {"symbol": "NVDA", "start_date": "20230920", "end_date": "20260920"},
+     "区间最高 high=236.29（2026-05-14）", 0),
+]
+
 def _case_category(case) -> str:
     return case[4] if len(case) > 4 else "global"
 
@@ -178,7 +199,7 @@ def start_local_server(port: int) -> subprocess.Popen:
     return proc
 
 
-async def verify(url: str, url_is_remote: bool = False) -> int:
+async def verify(url: str, url_is_remote: bool = False, smoke: bool = False) -> int:
     from mcp import ClientSession
     from mcp.client.sse import sse_client
 
@@ -189,9 +210,12 @@ async def verify(url: str, url_is_remote: bool = False) -> int:
             resp = await session.list_tools()
             listed = resp.tools if hasattr(resp, "tools") else resp[0].tools
             names = {t.name for t in listed}
-            # 本地 stub server 只注册 global 类工具：过滤掉其他类别的用例
-            cases = CASES if url_is_remote else [c for c in CASES if _case_category(c) == "global"]
-            print(f"cases to run: {len(cases)}/{len(CASES)}")
+            # 用例选择：smoke 只跑核心验收集；本地 stub server 只注册 global
+            # 类工具，过滤掉其他类别的用例
+            source = SMOKE_CASES if smoke else CASES
+            cases = source if url_is_remote else [c for c in source if _case_category(c) == "global"]
+            mode = "smoke" if smoke else "full"
+            print(f"cases to run ({mode}): {len(cases)}/{len(source)}")
             for tool, args, expect, min_bars, *_rest in cases:
                 if tool not in names:
                     print(f"  SKIP  {tool}: not registered")
@@ -252,6 +276,8 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--url", default="", help="MCP SSE endpoint；留空则本地起 server")
     parser.add_argument("--port", type=int, default=8765)
+    parser.add_argument("--smoke", action="store_true",
+                        help="只跑核心极值真值 + 断崖负例（线上部署快速验收）")
     args = parser.parse_args()
 
     proc = None
@@ -261,7 +287,7 @@ def main() -> int:
         url = f"http://127.0.0.1:{args.port}/sse"
         print(f"local server started: {url}")
     try:
-        return asyncio.run(verify(url, url_is_remote=bool(args.url)))
+        return asyncio.run(verify(url, url_is_remote=bool(args.url), smoke=args.smoke))
     finally:
         if proc:
             proc.terminate()
