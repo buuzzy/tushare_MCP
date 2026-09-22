@@ -109,12 +109,17 @@ def format_kline(
     code_label: str,
     name: str,
     per_code_limit: int = 250,
+    news_keys: list | None = None,
 ) -> str:
     """K 线（akshare 中文列）-> `--- 标题 (Total: N) ---` + 每行一根 Bar。
 
     紧凑行格式（sage data-cache/图表模板均兼容英文别名列）：
         date:YYYY-MM-DD|open:..|high:..|low:..|close:..|pct_chg:..|vol:..|amount:..
     代码/名称/货币只在标题行声明一次，行内不重复。
+
+    news_keys: [(code, [别名...]), ...] 非空时在输出尾部附带该标的的
+    "相关资讯"段（服务端按 corpus 新闻过滤，失败/无命中零追加），
+    实现"拉行情顺便带资讯"；测试与内部聚合调用不传即不附带。
 
     超长窗口策略：日线超过 per_code_limit 时自动聚合为周线（仍超则月线），
     置顶声明等效性——2026-09-20 实测：截断+提示"分段查询"后模型仍会漏查
@@ -246,7 +251,11 @@ def format_kline(
     else:
         for _, row in agg_df.iterrows():
             lines.append(_bar_line(row))
-    return "\n".join(lines) + corp_action_note
+    out = "\n".join(lines) + corp_action_note
+    if news_keys:
+        from tools.corpus.news_context import news_section  # 局部导入防环
+        out += news_section(news_keys)
+    return out
 
 
 def format_indicator(

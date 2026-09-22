@@ -891,5 +891,73 @@ class UsRatioAdjustTests(unittest.TestCase):
         self.assertAlmostEqual(out["收盘"].iloc[0], 100.0, places=6)
 
 
+class NewsContextTests(unittest.TestCase):
+    """资讯上下文：宏观摘要 + 标的过滤 + K 线附带段（全部离线，mock corpus）。"""
+
+    @classmethod
+    def setUpClass(cls):
+        from tools.corpus import news_context as nc
+
+        cls.nc = nc
+        cls._rows = [
+            {"title": "美联储9月加息25个基点", "time": "2026-09-17 06:00:00",
+             "src": "新华财经", "content": "联邦基金利率升至3.75%-4.00%"},
+            {"title": "A股又现大肉签", "time": "2026-09-22 10:30:29",
+             "src": "财联社", "content": "中塑股份上市大涨"},
+            {"title": "埃克森美孚宣布新的分红计划", "time": "2026-09-18 09:00:00",
+             "src": "路透", "content": "XOM 维持季度分红"},
+            {"title": "怪兽饮料遭遇竞争压力", "time": "2026-09-16 08:00:00",
+             "src": "彭博", "content": "MNST 能量饮料份额下滑"},
+        ]
+        patcher = mock.patch.object(nc, "_fetch_corpus", return_value=cls._rows)
+        patcher.start()
+        cls.addClassCleanup(patcher.stop)
+
+    def test_macro_digest_prefers_macro_keywords(self):
+        out = self.nc.build_news_context(symbol_entries=None, macro_days=7, macro_limit=2)
+        self.assertIn("宏观/市场要闻", out)
+        # 宏观词命中排最前；兜底位允许一般新闻按时间补位
+        self.assertLess(out.index("美联储9月加息25个基点"), out.index("大肉签"))
+
+    def test_symbol_filter_word_boundary_and_alias(self):
+        # 代码边界：XOM 不应被 "AXOMX" 误命中（构造干扰行验证匹配函数本身）
+        row = {"title": "XOM 分红", "time": "2026-09-18", "src": "r", "content": ""}
+        self.assertTrue(self.nc._hit(row, "XOM", []))
+        decoy = {"title": "AXOMX 报告", "time": "2026-09-18", "src": "r", "content": ""}
+        self.assertFalse(self.nc._hit(decoy, "XOM", []))
+        # 别名子串命中
+        by_alias = {"title": "埃克森美孚产量创新高", "time": "2026-09-18", "src": "r", "content": ""}
+        self.assertTrue(self.nc._hit(by_alias, "XXXX", ["埃克森美孚"]))
+
+    def test_news_section_empty_when_no_hits(self):
+        out = self.nc.news_section([("ZZZZ", ["不存在公司"])])
+        self.assertEqual(out, "")
+
+    def test_news_section_attached_with_marker(self):
+        out = self.nc.news_section([("XOM", ["埃克森美孚"])])
+        self.assertIn("--- 相关资讯", out)
+        self.assertIn("📰", out)
+        self.assertIn("埃克森美孚宣布新的分红计划", out)
+
+    def test_format_kline_news_opt_in(self):
+        df = format_kline(self._make_kline_df(), "美股日线行情", "美元", "XOM", "埃克森美孚")
+        self.assertNotIn("相关资讯", df)  # 默认不附带（测试/聚合路径零影响）
+        out = format_kline(self._make_kline_df(), "美股日线行情", "美元", "XOM", "埃克森美孚",
+                           news_keys=[("XOM", ["埃克森美孚"])])
+        self.assertIn("--- 相关资讯", out)
+        self.assertIn("埃克森美孚宣布新的分红计划", out)
+
+    @staticmethod
+    def _make_kline_df(n: int = 5) -> pd.DataFrame:
+        return pd.DataFrame({
+            "日期": [f"2026-09-{10 + i}" for i in range(n)],
+            "开盘": [100.0 + i for i in range(n)],
+            "最高": [101.0 + i for i in range(n)],
+            "最低": [99.0 + i for i in range(n)],
+            "收盘": [100.5 + i for i in range(n)],
+            "涨跌幅": [0.5] * n, "成交量": [1000] * n,
+        })
+
+
 if __name__ == "__main__":
     unittest.main()

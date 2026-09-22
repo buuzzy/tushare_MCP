@@ -5,6 +5,7 @@ from .research_report import register_research_report_tools
 from .anns_d import register_anns_d_tools
 from .irm_qa import register_irm_qa_tools
 from .npr import register_npr_tools
+from .news_context import register_news_context_tools
 
 def register_corpus_tools(mcp):
     """Register all corpus/news/policy tools (powered by minishare)."""
@@ -15,3 +16,4 @@ def register_corpus_tools(mcp):
     register_anns_d_tools(mcp)
     register_irm_qa_tools(mcp)
     register_npr_tools(mcp)
+    register_news_context_tools(mcp)

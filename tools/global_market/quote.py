@@ -570,7 +570,8 @@ def _hk_kline_impl(period: str, symbol: str, start_date: str, end_date: str, adj
         hint = hint or "该代码可能不存在或已退市，建议与用户确认代码；也可用 search_symbol 按名称搜索"
         return (f"未找到港股{_PERIOD_CN[period]}行情数据（symbol='{symbol}'，"
                 f"区间 {start}~{end}）。{hint}")
-    return format_kline(df, _kline_title(f"港股{_PERIOD_CN[period]}行情", adjust), "港元", f"{code}.HK", name) + _staleness_note(df, end)
+    return format_kline(df, _kline_title(f"港股{_PERIOD_CN[period]}行情", adjust), "港元", f"{code}.HK", name,
+                        news_keys=[(code, [name] if name else [])]) + _staleness_note(df, end)
 
 
 def _us_kline_impl(period: str, symbol: str, start_date: str, end_date: str, adjust: str) -> str:
@@ -616,7 +617,9 @@ def _us_kline_impl(period: str, symbol: str, start_date: str, end_date: str, adj
 
     if df.empty:
         return f"未找到美股行情数据（symbol='{symbol}'，区间 {start}~{end}）"
-    return format_kline(df, _kline_title(f"美股{_PERIOD_CN[period]}行情", adjust), "美元", ticker, _lookup_name("US", ticker)) + _staleness_note(df, end)
+    us_name = _lookup_name("US", ticker)
+    return format_kline(df, _kline_title(f"美股{_PERIOD_CN[period]}行情", adjust), "美元", ticker, us_name,
+                        news_keys=[(ticker, [us_name] if us_name else [])]) + _staleness_note(df, end)
 
 
 def _fetch_us_index_kline(code: str, period: str, start: str, end: str) -> pd.DataFrame:
@@ -803,4 +806,5 @@ def register_quote_tools(mcp) -> None:
                 df = _aggregate_kline(df, "W" if period == "weekly" else "M")
         else:
             df, _ = _fetch_tx_kline(index_code, period, start, end, "")
-        return format_kline(df, f"{name}{_PERIOD_CN[period]}行情", "点", index_code, name)
+        return format_kline(df, f"{name}{_PERIOD_CN[period]}行情", "点", index_code, name,
+                            news_keys=[(index_code, [name] if name else [])])

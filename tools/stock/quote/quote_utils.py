@@ -392,7 +392,8 @@ def _long_window_display(df: pd.DataFrame, period: str) -> tuple[pd.DataFrame, s
 
 
 def format_quote_data(
-    df: pd.DataFrame, period: str, requested_codes: Iterable[str], adjust: str = ""
+    df: pd.DataFrame, period: str, requested_codes: Iterable[str], adjust: str = "",
+    attach_news: bool = False,
 ) -> str:
     labels = {
         "daily": ("日线", ""),
@@ -480,4 +481,22 @@ def format_quote_data(
             if line:
                 results.append(line)
 
-    return "\n".join(results)
+    out = "\n".join(results)
+    if attach_news and not df.empty:
+        # "拉行情顺便带资讯"（2026-09-22）：按输出中实际出现的 代码/名称
+        # 过滤近 14 天报道，最多 2 个标的各 4 条；失败/无命中零追加。
+        try:
+            from tools.corpus.news_context import news_section
+            entries: list[tuple[str, list[str]]] = []
+            if "ts_code" in df.columns:
+                for ts_code in list(dict.fromkeys(df["ts_code"].dropna().tolist()))[:2]:
+                    names: list[str] = []
+                    if "name" in df.columns:
+                        names = [str(n) for n in
+                                 df.loc[df["ts_code"] == ts_code, "name"].dropna().unique().tolist()
+                                 if str(n) and str(n) != ts_code]
+                    entries.append((ts_code, names))
+            out += news_section(entries)
+        except Exception:  # 资讯失败绝不影响行情主流程
+            pass
+    return out

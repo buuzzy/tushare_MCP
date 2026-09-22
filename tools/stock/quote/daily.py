@@ -52,4 +52,4 @@ def register_daily_tools(mcp):
         if df.empty:
             return "未找到日线行情数据"
 
-        return format_quote_data(df, "daily", requested_codes, adjust)
+        return format_quote_data(df, "daily", requested_codes, adjust, attach_news=True)
