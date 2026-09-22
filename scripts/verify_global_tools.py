@@ -113,11 +113,14 @@ CASES = [
     # 3 年区间最高发生日经多源+新闻实证锁定 2026-05-14（名义盘中 236.54：
     # 每经 2026-05-15 与 CMoney 独立报道一致；09-04 的 234.76 仅"接近历史
     # 最高"，此前"区间最高 234.76@2026-09-04"基准有误）。qfq 价格随未来
-    # 除权漂移，故断言当前 qfq 值与极值发生日
+    # 除权漂移，极值锁日期 + 数值首位用 REGEX_CASES 容漂移断言
     ("us_daily", {"symbol": "NVDA", "start_date": "20230920", "end_date": "20260920"},
      "（前复权）", 150),
-    ("us_daily", {"symbol": "NVDA", "start_date": "20230920", "end_date": "20260920"},
-     "区间最高 high=236.29（2026-05-14）", 0),
+    # 美股比例复权（2026-09-22）：XOM 25 年 qfq 全史月线必须完整出数。
+    # 旧减法复权在此区间产生负价（close:-39.2，见 FORBID/REGEX_CASES）；
+    # 新浪原始数据 2005-2006 有拼接缺口，聚合根数略低于完整月份
+    ("us_daily", {"symbol": "XOM", "start_date": "20010101", "end_date": "20260922"},
+     "（前复权）", 200),
     ("global_index_daily", {"symbol": "HSI", "start_date": "20260901"}, "hkHSI 恒生指数", 8),
     ("global_index_daily", {"symbol": "SPX", "start_date": "20260901"}, ".INX 标普500指数", 5),
     ("global_index_daily", {"symbol": "DJIA", "start_date": "20260901"}, ".DJI 道琼斯工业指数", 5),
@@ -160,6 +163,23 @@ FORBID_CASES = [
      "pct_chg:-78"),
     ("hk_monthly", {"symbol": "00700", "start_date": "20060901", "adjust": "qfq"},
      "pct_chg:-78"),
+    # 美股比例复权（2026-09-22）：旧 akshare 减法复权把 XOM 2001 年算成
+    # 负数（close:-39.2）。25 年 qfq 全史中任何负收盘价都是回归。
+    ("us_daily", {"symbol": "XOM", "start_date": "20010101", "end_date": "20260922"},
+     "close:-"),
+]
+
+# 正则断言用例：(工具, 参数, 正则)。qfq 价格随未来分红漂移（新浪因子文件
+# 滞后约一个季度，~0.6%/次），无法用固定子串锚定，改用区间断言。
+# XOM 2022-01-07 qfq close：裁判真值 58.58（westock），当前算法 58.96；
+# 旧减法复权为 51.75。区间 [54, 64) 同时覆盖漂移并排除两种回归。
+REGEX_CASES = [
+    ("us_daily", {"symbol": "XOM", "start_date": "20220104", "end_date": "20220110"},
+     r"date:2022-01-07\|[^\n]*close:(5[4-9]|6[0-3])\."),
+    # NVDA 3 年区间最高：发生日 2026-05-14（多源新闻实证），数值 236.x 随
+    # 分红小幅漂移（比例复权重构前为 236.29 / 重构后 236.2646）
+    ("us_daily", {"symbol": "NVDA", "start_date": "20230920", "end_date": "20260920"},
+     r"区间最高 high=236\.\d+（2026-05-14）"),
 ]
 
 # smoke 用例（--smoke，2026-09-21）：线上部署后的快速验收集，只锁三类
@@ -176,9 +196,8 @@ SMOKE_CASES = [
     # 断崖声明：不复权口径下拆股跳变必须附公司行动声明
     ("hk_daily", {"symbol": "00700", "start_date": "20140514", "end_date": "20140516", "adjust": ""},
      "疑似公司行动跳变", 3),
-    # 美股 qfq 极值发生日
-    ("us_daily", {"symbol": "NVDA", "start_date": "20230920", "end_date": "20260920"},
-     "区间最高 high=236.29（2026-05-14）", 0),
+    # 美股 qfq 极值：锁发生日 + 数值首位（qfq 随分红漂移，固定子串会误报）
+    # REGEX_CASES 在 smoke/全量下均执行，此处不再重复
 ]
 
 def _case_category(case) -> str:
@@ -264,6 +283,28 @@ async def verify(url: str, url_is_remote: bool = False, smoke: bool = False) -> 
                         failed += 1
                     else:
                         print(f"  PASS  {tool}: 无 '{forbid}'")
+                        passed += 1
+                except Exception as e:
+                    print(f"  FAIL  {tool}{args}: {type(e).__name__}: {str(e)[:100]}")
+                    failed += 1
+            # 正则断言：qfq 漂移容差带（smoke/全量均执行；用例均为 global 类）
+            import re as _re
+            for tool, args, pattern in REGEX_CASES:
+                if tool not in names:
+                    print(f"  SKIP  {tool}: not registered")
+                    failed += 1
+                    continue
+                try:
+                    result = await session.call_tool(tool, args)
+                    text = "".join(getattr(c, "text", "") for c in result.content)
+                    if result.isError:
+                        print(f"  FAIL  {tool}{args}: isError")
+                        failed += 1
+                    elif not _re.search(pattern, text):
+                        print(f"  FAIL  {tool}{args}: 正则未命中 {pattern} -> {text[:150]}")
+                        failed += 1
+                    else:
+                        print(f"  PASS  {tool}: 正则命中")
                         passed += 1
                 except Exception as e:
                     print(f"  FAIL  {tool}{args}: {type(e).__name__}: {str(e)[:100]}")

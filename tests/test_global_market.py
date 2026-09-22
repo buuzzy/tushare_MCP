@@ -780,5 +780,116 @@ class SinaHkPrimarySourceTests(unittest.TestCase):
         self.assertNotIn("疑似公司行动跳变", out2)
 
 
+class UsRatioAdjustTests(unittest.TestCase):
+    """美股比例复权（2026-09-22 重构）离线测试。
+
+    场景：拆股（原始价已跳变 / 已预调整两种）、分红比例因子、
+    qfq/hfq 连续性、hfq 首日=原始价、复权文件缺失退化。
+    """
+
+    def _make_raw(self, split_day_close=50.0):
+        # 8 个交易日；第 5 天（index 4）2:1 拆股：名义价 102 → 50
+        return pd.DataFrame({
+            "date": pd.to_datetime([
+                "2020-01-01", "2020-01-02", "2020-01-03", "2020-01-06",
+                "2020-01-07", "2020-01-08", "2020-01-09", "2020-01-10",
+            ]),
+            "open": [99.0, 100.0, 101.0, 102.0, 50.5, 51.0, 52.0, 51.0],
+            "high": [100.0, 101.0, 102.0, 103.0, 51.0, 52.0, 53.0, 52.0],
+            "low": [98.0, 99.0, 100.0, 101.0, 49.5, 50.0, 51.0, 50.0],
+            "close": [100.0, 100.5, 101.0, 102.0, split_day_close, 51.0, 52.0, 51.0],
+            "volume": [100.0] * 8,
+        })
+
+    def test_split_drop_present_uses_factor(self):
+        from tools.global_market import quote
+        raw = self._make_raw()  # 2020-01-07 原始价 102 → 50（已跳变）
+        reinstate = pd.DataFrame({
+            "date": pd.to_datetime(["1970-01-01", "2020-01-07"]),
+            "adjust": [0.0, 0.0],
+            "factor": [0.5, 1.0],
+        })
+        events = quote._us_ratio_adjust_events(reinstate, raw)
+        self.assertEqual(len(events), 1)
+        self.assertAlmostEqual(events[0][1], 0.5, places=9)
+        qfq = quote._apply_us_ratio_adjust(raw, reinstate, "qfq")
+        # 拆股前价格减半（q=0.5），拆股后不动
+        self.assertAlmostEqual(qfq["close"].iloc[0], 50.0, places=6)
+        self.assertAlmostEqual(qfq["close"].iloc[3], 51.0, places=6)
+        self.assertAlmostEqual(qfq["close"].iloc[4], 50.0, places=6)
+        self.assertAlmostEqual(qfq["close"].iloc[-1], 51.0, places=6)
+        # 连续性：复权后相邻日涨跌幅不应有假断崖
+        pct = qfq["close"].pct_change().abs().max()
+        self.assertLess(pct, 0.05)
+
+    def test_split_pre_adjusted_skips_factor(self):
+        from tools.global_market import quote
+        # 原始价在拆股日无跳变（103 ≈ 前日 102，模拟新浪预调整拼接段缺陷）
+        raw = self._make_raw(split_day_close=103.0)
+        reinstate = pd.DataFrame({
+            "date": pd.to_datetime(["1970-01-01", "2020-01-07"]),
+            "adjust": [0.0, 0.0],
+            "factor": [0.5, 1.0],
+        })
+        events = quote._us_ratio_adjust_events(reinstate, raw)
+        self.assertEqual(events[0][1], 1.0)  # 检测到已预调整 → 跳过
+        qfq = quote._apply_us_ratio_adjust(raw, reinstate, "qfq")
+        # 全序列不动（q=1）
+        for a, b in zip(raw["close"], qfq["close"]):
+            self.assertAlmostEqual(a, b, places=6)
+
+    def test_dividend_ratio_and_hfq(self):
+        from tools.global_market import quote
+        raw = self._make_raw()
+        # 2020-01-09 分红 ΔC=+1.0（升序文件 adjust 递增），F=1 → D=1.0
+        reinstate = pd.DataFrame({
+            "date": pd.to_datetime(["1970-01-01", "2020-01-09"]),
+            "adjust": [0.0, 1.0],
+            "factor": [1.0, 1.0],
+        })
+        events = quote._us_ratio_adjust_events(reinstate, raw)
+        self.assertEqual(len(events), 1)
+        expected_q = (51.0 - 1.0) / 51.0
+        self.assertAlmostEqual(events[0][1], expected_q, places=9)
+        qfq = quote._apply_us_ratio_adjust(raw, reinstate, "qfq")
+        # 分红（01-09）之前的价格 × q；之后不动
+        self.assertAlmostEqual(qfq["close"].iloc[0], 100.0 * expected_q, places=6)
+        self.assertAlmostEqual(qfq["close"].iloc[6], 52.0, places=6)
+        self.assertAlmostEqual(qfq["close"].iloc[7], 51.0, places=6)
+        hfq = quote._apply_us_ratio_adjust(raw, reinstate, "hfq")
+        # hfq 首日 = 原始价；分红后价格 × 1/q
+        self.assertAlmostEqual(hfq["close"].iloc[0], 100.0, places=6)
+        self.assertAlmostEqual(hfq["close"].iloc[6], 52.0 / expected_q, places=6)
+        # qfq/hfq 等比：hfq/qfq 对所有日期为同一常数
+        ratio = (hfq["close"] / qfq["close"]).iloc[0]
+        self.assertAlmostEqual((hfq["close"] / qfq["close"]).iloc[-1], ratio, places=6)
+
+    def test_events_before_raw_start_filtered(self):
+        from tools.global_market import quote
+        raw = self._make_raw()
+        reinstate = pd.DataFrame({
+            "date": pd.to_datetime(["1970-01-01", "2019-06-01", "2020-01-09"]),
+            "adjust": [0.0, 10.0, 11.0],
+            "factor": [1.0, 1.0, 1.0],
+        })
+        events = quote._us_ratio_adjust_events(reinstate, raw)
+        # 2019-06-01 的事件（早于原始首日）必须被过滤
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0][0], pd.Timestamp("2020-01-09"))
+
+    def test_us_kline_degrades_to_raw_on_reinstate_failure(self):
+        from tools.global_market import quote
+        raw = self._make_raw()
+        with mock.patch.object(quote, "em_call") as m:
+            def call(group, fn, cache_key="", ttl_seconds=0.0):
+                if cache_key.startswith("us_kl_sina"):
+                    return raw
+                raise RuntimeError("network down")
+            m.side_effect = call
+            out = quote._fetch_us_kline("FAKE", "qfq")
+        self.assertEqual(len(out), 8)
+        self.assertAlmostEqual(out["收盘"].iloc[0], 100.0, places=6)
+
+
 if __name__ == "__main__":
     unittest.main()

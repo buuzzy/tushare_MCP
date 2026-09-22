@@ -12,7 +12,9 @@
 # PEP 585/604 注解可原生求值，因此**禁止在此模块加 future annotations import**。
 
 import datetime as dt
+import math
 import time
+from bisect import bisect_right
 
 import akshare as ak
 import pandas as pd
@@ -188,16 +190,33 @@ def _fetch_us_kline(ticker: str, adjust: str) -> pd.DataFrame:
     （≤650 根，code=usNVDA.OQ 式）2026-09-20 实测可用（86 根），可作备用源
     （尚未接入）。故美股主源走新浪全历史（一次拉取 + 缓存，akshare 解码）。
     返回中文列 DataFrame。
+
+    复权（2026-09-22 重构）：akshare 的 stock_us_daily(adjust='qfq') 直接采用
+    新浪"减法复权"（历史价逐年减累计分红），长史必然失真（XOM 2001 年算出
+    -39 美元）。改为：拉未复权价 + 新浪复权因子文件，本地按比例复权重算
+    （与行情 APP 同口径）。详见 _us_ratio_adjust_events / _apply_us_ratio_adjust。
     """
-    fq = adjust if adjust in ("qfq", "hfq") else ""
     df = em_call(
         "sina_quote",
-        lambda: ak.stock_us_daily(symbol=ticker, adjust=fq),
-        cache_key=f"us_kl_sina:{ticker}:{fq}",
+        lambda: ak.stock_us_daily(symbol=ticker, adjust=""),
+        cache_key=f"us_kl_sina:{ticker}:",
         ttl_seconds=TTL_KLINE,
     )
     if df is None or df.empty:
         return pd.DataFrame()
+    fq = adjust if adjust in ("qfq", "hfq") else ""
+    if fq:
+        try:
+            reinstate = _fetch_sina_us_reinstate(ticker)
+        except Exception as exc:
+            reinstate = None
+            log_debug(f"[us_kline] reinstate file fetch failed for {ticker}: {exc}")
+        if reinstate is not None and not reinstate.empty:
+            try:
+                df = _apply_us_ratio_adjust(df, reinstate, fq)
+            except Exception as exc:
+                log_debug(f"[us_kline] ratio adjust failed for {ticker}: {exc}")
+                # 复权失败时退化为未复权价（宁可保守也不输出负价）
     out = pd.DataFrame({
         "日期": df["date"].astype(str),
         "开盘": pd.to_numeric(df["open"], errors="coerce"),
@@ -208,6 +227,132 @@ def _fetch_us_kline(ticker: str, adjust: str) -> pd.DataFrame:
     })
     out["涨跌额"] = out["收盘"] - out["收盘"].shift(1)
     out["涨跌幅"] = out["涨跌额"] / out["收盘"].shift(1) * 100
+    return out
+
+
+# ---------------------------------------------------------------------------
+# 美股比例复权（2026-09-22）
+#
+# 背景：新浪美股复权因子文件（reinstatement/{ticker}_qfq.js）含两个成分：
+#   f 列 = 拆股累计因子（比例，正确）；c 列 = 分红累计减额（加法，缺陷）。
+# akshare 按 `价 × f + c` 原样实现 → 分红走减法，长史必然被减穿成负数。
+#
+# 修复：用因子文件反推出每次分红金额（D = Δc / f(e)），与未复权价一起按
+# 比例法重算：q_div = (P_prev − D) / P_prev。拆股直接用 f 列的比例。
+#
+# 已知数据缺陷（实测 XOM）：新浪美股"未复权"序列是分供应商拼接的——
+# XOM 2001-01 ~ 2001-07 段已预除 2（2001-07-19 拆股提前体现）、2005-2006
+# 两年缺失、2007-03 起才是真实名义价。因此每个拆股事件需用原始序列自检：
+# 除权日附近原始价若已无跳变，说明该拆股已预调整，跳过（q=1），
+# 否则按 f 列比例调整。
+# ---------------------------------------------------------------------------
+
+_SINA_US_REINSTATE_URL = (
+    "https://finance.sina.com.cn/us_stock/company/reinstatement/{ticker}_qfq.js"
+)
+
+
+def _fetch_sina_us_reinstate(ticker: str) -> pd.DataFrame:
+    """拉取新浪美股复权因子文件，返回升序 (date, adjust, factor) 表。"""
+    def _do():
+        url = _SINA_US_REINSTATE_URL.format(ticker=ticker)
+        r = requests.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
+        r.raise_for_status()
+        text = r.text
+        payload = eval(text[text.index("{"): text.rindex("}") + 1])["data"]
+        f = pd.DataFrame(payload).rename(columns={"c": "adjust", "d": "date", "f": "factor"})
+        f["adjust"] = pd.to_numeric(f["adjust"], errors="coerce")
+        f["factor"] = pd.to_numeric(f["factor"], errors="coerce")
+        f["date"] = pd.to_datetime(f["date"])
+        return f.dropna().sort_values("date").reset_index(drop=True)
+
+    return em_call(
+        "sina_quote",
+        _do,
+        cache_key=f"us_reinstate:{ticker}",
+        ttl_seconds=TTL_KLINE,
+    )
+
+
+def _us_ratio_adjust_events(
+    reinstate: pd.DataFrame, raw: pd.DataFrame
+) -> list[tuple[pd.Timestamp, float]]:
+    """解析复权因子文件为事件表 [(date, q)]（升序）。
+
+    q 为"该事件对所有早于 date 的价格"的比例调整系数：
+      - 拆股：q = F_prev / F_new；若原始序列在除权日已无对应跳变
+        （新浪预调整缺陷），则 q = 1。
+      - 分红：D = ΔC / F(e)（加法口径反推单次金额），
+        q = (P_prev − D) / P_prev，P_prev 为除息日前收盘。
+    """
+    f = reinstate
+    closes = raw.assign(date=pd.to_datetime(raw["date"])).set_index("date")["close"]
+    closes = pd.to_numeric(closes, errors="coerce").dropna()
+    first_date = closes.index.min()
+
+    f = f.copy()
+    f["d_adjust"] = f["adjust"].diff().fillna(0.0)
+    f["d_factor"] = f["factor"].diff().fillna(0.0)
+
+    events: list[tuple[pd.Timestamp, float]] = []
+    for i in range(1, len(f)):  # 首行（1970-01-01 基线）不是事件
+        row = f.iloc[i]
+        if row["date"] < first_date:
+            continue  # 早于原始数据的事件对本序列无意义（qfq 不涉及，hfq 防污染）
+        if abs(row["d_factor"]) > 1e-12:
+            q_expected = f.iloc[i - 1]["factor"] / row["factor"]
+            d = row["date"]
+            q = q_expected
+            prev_close = closes.asof(d - pd.Timedelta(days=1))
+            ex_close = closes.asof(d)
+            if prev_close is not None and ex_close is not None and ex_close > 0:
+                r_obs = float(prev_close) / float(ex_close)
+                # 二选一：原始序列支持"已跳变"（r_obs≈1/q）就用比例因子；
+                # 更接近"无跳变"（r_obs≈1）则说明该段已被预调整，跳过
+                if abs(r_obs - 1.0) < abs(r_obs - 1.0 / q_expected):
+                    q = 1.0
+            events.append((d, float(q)))
+        if abs(row["d_adjust"]) > 1e-9:
+            D = row["d_adjust"] / row["factor"]
+            p_prev = closes.asof(row["date"] - pd.Timedelta(days=1))
+            if p_prev is not None and not math.isnan(p_prev) and p_prev > D > 0:
+                events.append((row["date"], float((p_prev - D) / p_prev)))
+
+    events.sort(key=lambda x: x[0])
+    return events
+
+
+def _apply_us_ratio_adjust(raw: pd.DataFrame, reinstate: pd.DataFrame, direction: str) -> pd.DataFrame:
+    """按比例复权重算 OHLC（direction: 'qfq' 前复权 / 'hfq' 后复权）。
+
+    qfq(t) = raw(t) × Π_{事件 e > t} q_e
+    hfq(t) = raw(t) × Π_{事件 e ≤ t} (1 / q_e)
+    两者在除权日两侧均连续（拆股/分红当日原始价已体现，因子恰好抵消）。
+    """
+    events = _us_ratio_adjust_events(reinstate, raw)
+    dates = pd.to_datetime(raw["date"])
+    ev_dates = [e[0] for e in events]
+
+    factors: list[float] = []
+    if direction == "qfq":
+        suffix = [1.0] * (len(events) + 1)
+        for i in range(len(events) - 1, -1, -1):
+            suffix[i] = suffix[i + 1] * events[i][1]
+        for d in dates:
+            # 严格大于 d 的最早事件下标（除权日本身不调整）
+            factors.append(suffix[bisect_right(ev_dates, d)])
+    else:  # hfq
+        prefix = [1.0] * (len(events) + 1)
+        for i, (_, q) in enumerate(events):
+            prefix[i + 1] = prefix[i] * (1.0 / q if q > 0 else 1.0)
+        for d in dates:
+            # ≤ d 的事件全部生效（含当日）
+            factors.append(prefix[bisect_right(ev_dates, d)])
+
+    g = pd.Series(factors, index=raw.index)
+    out = raw.copy()
+    for col in ("open", "high", "low", "close"):
+        out[col] = pd.to_numeric(out[col], errors="coerce") * g
     return out
 
 
