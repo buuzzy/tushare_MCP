@@ -5,7 +5,7 @@ from utils.token_manager import get_pro_client
 def register_fund_basic_tools(mcp):
     @mcp.tool()
     @handle_exception
-    def fund_basic(ts_code: str = "", market: str = "", status: str = "", name: str = "", limit: int = None, offset: int = None) -> str:
+    def fund_basic(ts_code: str = "", market: str = "", status: str = "", name: str = "", limit: int | None = None, offset: int | None = None) -> str:
         """
         获取公募基金数据列表，包括场内和场外基金。
         **注意：不包含ETF基金，ETF请使用 etf_basic 接口。**
