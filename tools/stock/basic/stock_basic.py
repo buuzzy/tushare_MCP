@@ -6,7 +6,7 @@ def register_stock_basic_tools(mcp):
     @mcp.tool()
     @handle_exception
     def stock_basic(ts_code: str = "", name: str = "", exchange: str = "", market: str = "", 
-                   is_hs: str = "", list_status: str = "L", area: str = "", industry: str = "", limit: int = None, offset: int = None) -> str:
+                   is_hs: str = "", list_status: str = "L", area: str = "", industry: str = "", limit: int | None = None, offset: int | None = None) -> str:
         """
         获取基础信息数据，包括股票代码、名称、上市日期、退市日期等。
         
