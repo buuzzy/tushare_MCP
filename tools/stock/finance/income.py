@@ -7,7 +7,7 @@ def register_income_tools(mcp):
     @handle_exception
     def income(ts_code: str, ann_date: str = "", f_ann_date: str = "", start_date: str = "",
                end_date: str = "", period: str = "", report_type: str = "", comp_type: str = "", 
-               limit: int = None, offset: int = None) -> str:
+               limit: int | None = None, offset: int | None = None) -> str:
         """
         获取上市公司利润表数据。支持多期趋势查询。
 
