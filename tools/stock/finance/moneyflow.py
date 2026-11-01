@@ -7,7 +7,7 @@ def register_moneyflow_tools(mcp):
     @mcp.tool()
     @handle_exception
     def moneyflow(ts_code: str = '', trade_date: str = '', start_date: str = '',
-                  end_date: str = '', limit: int = None) -> str:
+                  end_date: str = '', limit: int | None = None) -> str:
         """
         获取个股资金流向数据（主力、超大单、大单、中单、小单净流入/流出）。
 
