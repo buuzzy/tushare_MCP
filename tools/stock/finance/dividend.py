@@ -7,7 +7,7 @@ def register_dividend_tools(mcp):
     @handle_exception
     def dividend(ts_code: str, ann_date: str = "", record_date: str = "",
                ex_date: str = "", imp_ann_date: str = "", 
-               limit: int = None, offset: int = None) -> str:
+               limit: int | None = None, offset: int | None = None) -> str:
         """
         获取上市公司分红送股数据。
 
