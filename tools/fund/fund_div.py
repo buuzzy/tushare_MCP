@@ -5,7 +5,7 @@ from utils.token_manager import get_pro_client
 def register_fund_div_tools(mcp):
     @mcp.tool()
     @handle_exception
-    def fund_div(ann_date: str = "", ex_date: str = "", pay_date: str = "", ts_code: str = "", limit: int = None, offset: int = None) -> str:
+    def fund_div(ann_date: str = "", ex_date: str = "", pay_date: str = "", ts_code: str = "", limit: int | None = None, offset: int | None = None) -> str:
         """
         获取公募基金分红数据。
         
