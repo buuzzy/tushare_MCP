@@ -9,7 +9,7 @@ _FUND_NAV_THRESHOLD = 120
 def register_fund_nav_tools(mcp):
     @mcp.tool()
     @handle_exception
-    def fund_nav(ts_code: str = "", nav_date: str = "", market: str = "", start_date: str = "", end_date: str = "", limit: int = None, offset: int = None) -> str:
+    def fund_nav(ts_code: str = "", nav_date: str = "", market: str = "", start_date: str = "", end_date: str = "", limit: int | None = None, offset: int | None = None) -> str:
         """
         获取公募基金净值数据。
 
