@@ -5,7 +5,7 @@ from utils.token_manager import get_pro_client
 def register_fund_manager_tools(mcp):
     @mcp.tool()
     @handle_exception
-    def fund_manager(ts_code: str = "", ann_date: str = "", name: str = "", limit: int = None, offset: int = None) -> str:
+    def fund_manager(ts_code: str = "", ann_date: str = "", name: str = "", limit: int | None = None, offset: int | None = None) -> str:
         """
         获取公募基金经理数据，包括基金经理简历等数据。
         
