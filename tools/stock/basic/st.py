@@ -5,7 +5,7 @@ from utils.token_manager import get_pro_client
 def register_st_tools(mcp):
     @mcp.tool()
     @handle_exception
-    def st(ts_code: str = '', pub_date: str = '', imp_date: str = '', limit: int = None, offset: int = None) -> str:
+    def st(ts_code: str = '', pub_date: str = '', imp_date: str = '', limit: int | None = None, offset: int | None = None) -> str:
         """
         获取ST风险警示板股票列表。
         
