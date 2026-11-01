@@ -5,7 +5,7 @@ from utils.token_manager import get_pro_client
 def register_namechange_tools(mcp):
     @mcp.tool()
     @handle_exception
-    def namechange(ts_code: str = '', start_date: str = '', end_date: str = '', limit: int = None, offset: int = None) -> str:
+    def namechange(ts_code: str = '', start_date: str = '', end_date: str = '', limit: int | None = None, offset: int | None = None) -> str:
         """
         获取上市公司历史名称变更记录 (namechange)。
         
