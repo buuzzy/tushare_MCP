@@ -5,7 +5,7 @@ from utils.token_manager import get_pro_client
 def register_fund_share_tools(mcp):
     @mcp.tool()
     @handle_exception
-    def fund_share(ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = "", market: str = "", limit: int = None, offset: int = None) -> str:
+    def fund_share(ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = "", market: str = "", limit: int | None = None, offset: int | None = None) -> str:
         """
         获取基金规模数据，包含上海和深圳ETF基金。
         支持时间序列数据的智能截断展示（显示头部和尾部数据）。
