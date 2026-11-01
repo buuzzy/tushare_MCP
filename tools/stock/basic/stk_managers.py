@@ -5,7 +5,7 @@ from utils.token_manager import get_pro_client
 def register_stk_managers_tools(mcp):
     @mcp.tool()
     @handle_exception
-    def stk_managers(ts_code: str = '', ann_date: str = '', start_date: str = '', end_date: str = '', limit: int = None, offset: int = None) -> str:
+    def stk_managers(ts_code: str = '', ann_date: str = '', start_date: str = '', end_date: str = '', limit: int | None = None, offset: int | None = None) -> str:
         """
         获取上市公司管理层信息 (stk_managers)。
         
