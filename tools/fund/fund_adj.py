@@ -5,7 +5,7 @@ from utils.token_manager import get_pro_client
 def register_fund_adj_tools(mcp):
     @mcp.tool()
     @handle_exception
-    def fund_adj(ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = "", limit: int = None, offset: int = None) -> str:
+    def fund_adj(ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = "", limit: int | None = None, offset: int | None = None) -> str:
         """
         获取基金复权因子，用于计算基金复权行情。
         
