@@ -7,7 +7,7 @@ def register_forecast_tools(mcp):
     @handle_exception
     def forecast(ts_code: str, ann_date: str = "", start_date: str = "",
                end_date: str = "", period: str = "", type: str = "", 
-               limit: int = None, offset: int = None) -> str:
+               limit: int | None = None, offset: int | None = None) -> str:
         """
         获取上市公司业绩预告数据。
 

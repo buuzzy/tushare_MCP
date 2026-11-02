@@ -7,7 +7,7 @@ def register_cashflow_tools(mcp):
     @handle_exception
     def cashflow(ts_code: str, ann_date: str = "", f_ann_date: str = "", start_date: str = "",
                end_date: str = "", period: str = "", report_type: str = "", comp_type: str = "", 
-               is_calc: int = None, limit: int = None, offset: int = None) -> str:
+               is_calc: int | None = None, limit: int | None = None, offset: int | None = None) -> str:
         """
         获取上市公司现金流量表数据。支持多期趋势查询。
 

@@ -5,7 +5,7 @@ from utils.token_manager import get_pro_client
 def register_stock_st_tools(mcp):
     @mcp.tool()
     @handle_exception
-    def stock_st(ts_code: str = '', trade_date: str = '', start_date: str = '', end_date: str = '', exchange: str = '', limit: int = None, offset: int = None) -> str:
+    def stock_st(ts_code: str = '', trade_date: str = '', start_date: str = '', end_date: str = '', exchange: str = '', limit: int | None = None, offset: int | None = None) -> str:
         """
         获取ST股票列表，可根据交易日期获取历史上每天的ST列表。
         

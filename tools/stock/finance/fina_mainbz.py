@@ -6,7 +6,7 @@ def register_fina_mainbz_tools(mcp):
     @mcp.tool()
     @handle_exception
     def fina_mainbz(ts_code: str, period: str = "", type: str = "P",
-               start_date: str = "", end_date: str = "", limit: int = None, offset: int = None) -> str:
+               start_date: str = "", end_date: str = "", limit: int | None = None, offset: int | None = None) -> str:
         """
         获取上市公司主营业务构成，分地区和产品两种方式。
 

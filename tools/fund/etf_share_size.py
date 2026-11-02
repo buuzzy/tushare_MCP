@@ -5,7 +5,7 @@ from utils.token_manager import get_pro_client
 def register_etf_share_size_tools(mcp):
     @mcp.tool()
     @handle_exception
-    def etf_share_size(ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = "", exchange: str = "", limit: int = None, offset: int = None) -> str:
+    def etf_share_size(ts_code: str = "", trade_date: str = "", start_date: str = "", end_date: str = "", exchange: str = "", limit: int | None = None, offset: int | None = None) -> str:
         """
         获取ETF每日份额和规模数据。
         

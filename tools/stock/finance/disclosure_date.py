@@ -6,7 +6,7 @@ def register_disclosure_date_tools(mcp):
     @mcp.tool()
     @handle_exception
     def disclosure_date(ts_code: str, end_date: str = "", pre_date: str = "",
-               actual_date: str = "", limit: int = None, offset: int = None) -> str:
+               actual_date: str = "", limit: int | None = None, offset: int | None = None) -> str:
         """
         获取上市公司的财报披露计划日期。
 

@@ -5,7 +5,7 @@ from utils.token_manager import get_pro_client
 def register_etf_basic_tools(mcp):
     @mcp.tool()
     @handle_exception
-    def etf_basic(ts_code: str = "", index_code: str = "", list_date: str = "", list_status: str = "", exchange: str = "", mgr: str = "", limit: int = None, offset: int = None) -> str:
+    def etf_basic(ts_code: str = "", index_code: str = "", list_date: str = "", list_status: str = "", exchange: str = "", mgr: str = "", limit: int | None = None, offset: int | None = None) -> str:
         """
         获取国内ETF基础信息，包括了QDII。
         

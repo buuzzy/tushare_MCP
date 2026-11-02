@@ -5,7 +5,7 @@ from utils.token_manager import get_pro_client
 def register_fund_portfolio_tools(mcp):
     @mcp.tool()
     @handle_exception
-    def fund_portfolio(ts_code: str = "", symbol: str = "", ann_date: str = "", start_date: str = "", end_date: str = "", period: str = "", limit: int = None, offset: int = None) -> str:
+    def fund_portfolio(ts_code: str = "", symbol: str = "", ann_date: str = "", start_date: str = "", end_date: str = "", period: str = "", limit: int | None = None, offset: int | None = None) -> str:
         """
         获取公募基金持仓数据，季度更新。
         

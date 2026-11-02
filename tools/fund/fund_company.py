@@ -5,7 +5,7 @@ from utils.token_manager import get_pro_client
 def register_fund_company_tools(mcp):
     @mcp.tool()
     @handle_exception
-    def fund_company(name: str = "", province: str = "", limit: int = None, offset: int = None) -> str:
+    def fund_company(name: str = "", province: str = "", limit: int | None = None, offset: int | None = None) -> str:
         """
         获取公募基金管理人（基金公司）列表。
         **默认按成立日期倒序排列（新成立的在前）。**
