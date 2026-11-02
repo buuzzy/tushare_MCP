@@ -5,7 +5,7 @@ from utils.token_manager import get_corpus_client
 def register_major_news_tools(mcp):
     @mcp.tool()
     @handle_exception
-    def major_news(start_date: str, end_date: str, limit: int = 500, offset: int = 0) -> str:
+    def major_news(start_date: str, end_date: str, limit: int | None = None, offset: int | None = None) -> str:
         """
         获取重大新闻数据（含标题、正文、来源、链接）。支持按时间范围筛选。
 
@@ -15,6 +15,10 @@ def register_major_news_tools(mcp):
             limit: 单次返回条数上限，默认500
             offset: 跳过前 offset 条，用于分页
         """
+        if limit is None:
+            limit = 500
+        if offset is None:
+            offset = 0
         log_debug(f"Tool major_news called: start={start_date}, end={end_date}")
         pro = get_corpus_client()
         df = pro.major_news(start_date=start_date, end_date=end_date, limit=limit, offset=offset)

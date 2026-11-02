@@ -6,7 +6,7 @@ def register_npr_tools(mcp):
     @mcp.tool()
     @handle_exception
     def npr(org: str = '', start_date: str = '', end_date: str = '',
-            ptype: str = '', limit: int = 30) -> str:
+            ptype: str = '', limit: int | None = None) -> str:
         """
         获取政策法规数据（国家各部委发布的政策文件）。
 
@@ -17,6 +17,8 @@ def register_npr_tools(mcp):
             ptype: 政策类型（可选）
             limit: 返回条数上限，默认30
         """
+        if limit is None:
+            limit = 30
         log_debug(f"Tool npr called: limit={limit}")
         pro = get_corpus_client()
         api_params = {key: value for key, value in {

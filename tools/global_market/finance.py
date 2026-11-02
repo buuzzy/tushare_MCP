@@ -120,7 +120,7 @@ def register_finance_global_tools(mcp) -> None:
 
     @mcp.tool()
     @handle_exception
-    def hk_fina_indicator(symbol: str, indicator: str = "年度", limit: int = 10) -> str:
+    def hk_fina_indicator(symbol: str, indicator: str = "年度", limit: int | None = None) -> str:
         """
         获取港股公司主要财务指标（EPS/ROE/毛利率/净利率/资产负债率/营收与净利同比等）。
 
@@ -129,6 +129,8 @@ def register_finance_global_tools(mcp) -> None:
             indicator: '年度'（年报，默认）或 '报告期'（含中报/季报）
             limit: 返回最近 N 期（默认 10）
         """
+        if limit is None:
+            limit = 10
         log_debug(f"[global_finance] hk_fina_indicator symbol='{symbol}'")
         code = normalize_hk(symbol or "")
         if not code:
@@ -139,7 +141,7 @@ def register_finance_global_tools(mcp) -> None:
 
     @mcp.tool()
     @handle_exception
-    def us_fina_indicator(symbol: str, indicator: str = "年报", limit: int = 8) -> str:
+    def us_fina_indicator(symbol: str, indicator: str = "年报", limit: int | None = None) -> str:
         """
         获取美股公司主要财务指标（营收/净利及同比/毛利率/净利率/ROE/资产负债率/EPS 等）。
 
@@ -148,6 +150,8 @@ def register_finance_global_tools(mcp) -> None:
             indicator: '年报'（默认）/ '单季报' / '累计季报'
             limit: 返回最近 N 期（默认 8）
         """
+        if limit is None:
+            limit = 8
         log_debug(f"[global_finance] us_fina_indicator symbol='{symbol}'")
         ticker = (symbol or "").strip().upper()
         if not ticker:
@@ -205,7 +209,7 @@ def register_finance_global_tools(mcp) -> None:
 
     @mcp.tool()
     @handle_exception
-    def hk_buyback(symbol: str, start_date: str = "", end_date: str = "", limit: int = 30) -> str:
+    def hk_buyback(symbol: str, start_date: str = "", end_date: str = "", limit: int | None = None) -> str:
         """
         获取港股每日回购明细（回购股数/均价/金额，逐交易日一行，港元）。
         适合"最近回购了多少金额/每天回购情况"类问题；只要公告列表和原文链接请用 hk_announcements。
@@ -216,6 +220,8 @@ def register_finance_global_tools(mcp) -> None:
             end_date: 结束日期 (YYYYMMDD，可选)
             limit: 返回最近 N 条（默认 30，最新在前）
         """
+        if limit is None:
+            limit = 30
         log_debug(f"[global_finance] hk_buyback symbol='{symbol}' {start_date}~{end_date}")
         code = normalize_hk(symbol or "")
         if not code:

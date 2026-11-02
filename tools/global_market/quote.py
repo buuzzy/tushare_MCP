@@ -12,6 +12,7 @@
 # PEP 585/604 注解可原生求值，因此**禁止在此模块加 future annotations import**。
 
 import datetime as dt
+import json
 import math
 import time
 from bisect import bisect_right
@@ -259,7 +260,7 @@ def _fetch_sina_us_reinstate(ticker: str) -> pd.DataFrame:
         r = requests.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
         r.raise_for_status()
         text = r.text
-        payload = eval(text[text.index("{"): text.rindex("}") + 1])["data"]
+        payload = json.loads(text[text.index("{"): text.rindex("}") + 1])["data"]
         f = pd.DataFrame(payload).rename(columns={"c": "adjust", "d": "date", "f": "factor"})
         f["adjust"] = pd.to_numeric(f["adjust"], errors="coerce")
         f["factor"] = pd.to_numeric(f["factor"], errors="coerce")
