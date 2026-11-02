@@ -6,7 +6,7 @@ def register_irm_qa_tools(mcp):
     @mcp.tool()
     @handle_exception
     def irm_qa(ts_code: str = '', trade_date: str = '', start_date: str = '',
-               end_date: str = '', limit: int = 20, offset: int = 0) -> str:
+               end_date: str = '', limit: int | None = None, offset: int | None = None) -> str:
         """
         获取上市公司董秘互动问答数据（上交所+深交所）。
 
@@ -18,6 +18,10 @@ def register_irm_qa_tools(mcp):
             limit: 返回条数上限，默认20
             offset: 分页位移量，默认0
         """
+        if limit is None:
+            limit = 20
+        if offset is None:
+            offset = 0
         log_debug(f"Tool irm_qa called: ts_code={ts_code}")
         pro = get_corpus_client()
         params = {key: value for key, value in {

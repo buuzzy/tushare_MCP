@@ -5,7 +5,7 @@ from utils.token_manager import get_corpus_client
 def register_cctv_news_tools(mcp):
     @mcp.tool()
     @handle_exception
-    def cctv_news(date: str, limit: int = 100) -> str:
+    def cctv_news(date: str, limit: int | None = None) -> str:
         """
         获取央视新闻联播文字稿数据。
 
@@ -13,6 +13,8 @@ def register_cctv_news_tools(mcp):
             date: 日期，格式 YYYYMMDD（必填），如 20260725
             limit: 单次返回条数上限，默认100
         """
+        if limit is None:
+            limit = 100
         log_debug(f"Tool cctv_news called: date={date}")
         pro = get_corpus_client()
         df = pro.cctv_news(date=date, limit=limit)

@@ -7,7 +7,7 @@ def register_research_report_tools(mcp):
     @handle_exception
     def research_report(ts_code: str = '', trade_date: str = '', start_date: str = '', end_date: str = '',
                         report_type: str = '', inst_csname: str = '', ind_name: str = '',
-                        limit: int = 20, fields: str = '') -> str:
+                        limit: int | None = None, fields: str = '') -> str:
         """
         获取券商研究报告（个股研报、行业研报、宏观研究等）。数据自2021年起覆盖，每日增量更新。
 
@@ -22,6 +22,8 @@ def register_research_report_tools(mcp):
             limit: 返回条数上限，默认20
             fields: 上游返回字段（可选）。默认不返回 abstr；需要摘要时指定 fields，例如 "trade_date,title,abstr"
         """
+        if limit is None:
+            limit = 20
         log_debug(f"Tool research_report called: ts_code={ts_code}, trade_date={trade_date}")
         if not any([ts_code, trade_date, start_date, end_date, report_type, inst_csname, ind_name]):
             return "错误：至少提供一个筛选条件（ts_code/trade_date/start_date/end_date/report_type 等）"

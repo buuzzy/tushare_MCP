@@ -133,7 +133,7 @@ def register_announcement_tools(mcp) -> None:
 
     @mcp.tool()
     @handle_exception
-    def search_symbol(query: str, market: str = "all", limit: int = 10) -> str:
+    def search_symbol(query: str, market: str = "all", limit: int | None = None) -> str:
         """
         按代码或名称搜索港股/美股代码（基于活跃股票表）。
         在不确定代码时先用本工具查询，再调用行情/财务工具。
@@ -143,6 +143,8 @@ def register_announcement_tools(mcp) -> None:
             market: 'all'（默认）/ 'hk' / 'us'
             limit: 返回条数（默认 10）
         """
+        if limit is None:
+            limit = 10
         log_debug(f"[global] search_symbol query='{query}' market={market}")
         if not query or not query.strip():
             return "错误：必须提供 query 参数（代码或名称关键字）"
@@ -164,7 +166,7 @@ def register_announcement_tools(mcp) -> None:
 
     @mcp.tool()
     @handle_exception
-    def us_filings(symbol: str, form: str = "", limit: int = 10) -> str:
+    def us_filings(symbol: str, form: str = "", limit: int | None = None) -> str:
         """
         获取美股公司 SEC 申报文件列表（10-K 年报 / 10-Q 季报 / 8-K 重大事项 / 4 高管变动等）。
 
@@ -173,6 +175,8 @@ def register_announcement_tools(mcp) -> None:
             form: 申报类型过滤（可选，如 '10-K'、'10-Q'、'8-K'；留空返回全部）
             limit: 返回条数（默认 10）
         """
+        if limit is None:
+            limit = 10
         log_debug(f"[global] us_filings symbol='{symbol}' form='{form}'")
         ticker = (symbol or "").strip().upper()
         if not ticker:
@@ -185,7 +189,7 @@ def register_announcement_tools(mcp) -> None:
 
     @mcp.tool()
     @handle_exception
-    def hk_announcements(symbol: str, days: int = 30, limit: int = 10) -> str:
+    def hk_announcements(symbol: str, days: int | None = None, limit: int | None = None) -> str:
         """
         获取港股公司公告列表（港交所披露易官方数据，含 PDF 链接）。
 
@@ -194,6 +198,10 @@ def register_announcement_tools(mcp) -> None:
             days: 近 N 天（默认 30）
             limit: 返回条数（默认 10）
         """
+        if days is None:
+            days = 30
+        if limit is None:
+            limit = 10
         log_debug(f"[global] hk_announcements symbol='{symbol}' days={days}")
         code = normalize_hk(symbol or "")
         if not code:

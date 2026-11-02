@@ -6,7 +6,7 @@ def register_anns_d_tools(mcp):
     @mcp.tool()
     @handle_exception
     def anns_d(ts_code: str = '', ann_date: str = '', start_date: str = '', end_date: str = '',
-               limit: int = 50) -> str:
+               limit: int | None = None) -> str:
         """
         获取上市公司公告列表（含标题与详情链接）。数据自2023年起，实时更新。
 
@@ -20,6 +20,8 @@ def register_anns_d_tools(mcp):
             end_date: 结束日期 YYYYMMDD（可选）
             limit: 返回条数上限，默认50，最大2000
         """
+        if limit is None:
+            limit = 50
         log_debug(f"Tool anns_d called: ts_code={ts_code}, ann_date={ann_date}")
         if not any([ts_code, ann_date, start_date, end_date]):
             return "错误：至少提供一个筛选条件（ts_code/ann_date/start_date/end_date）"
