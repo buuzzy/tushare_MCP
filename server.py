@@ -71,6 +71,21 @@ def check_token_status_impl() -> str:
 
 
 # Aliases: maps hallucinated tool names to the correct registered name.
+#
+# 只保留「同义改写」——名字不同、语义一致，转发后拿到的东西不会错。
+#
+# 已移除的「语义误导」别名（删除而非转发，理由见下）：
+#   hk_quote  -> hk_daily  名字像实时快照，实际返回近 3 年日线；超 250 根会被
+#                          自动聚合成周线（约 25K 字符）。模型只想查一个收盘价，
+#                          却会烧掉整个上下文，且误以为拿到的是报价。
+#   us_quote  -> us_daily  同上。
+#   stock_quote -> daily   同上（名字像报价，实为日线序列）。
+#   news_search -> news    名字像关键词检索，但 news 只有 start_date/end_date/
+#                          src/limit/offset；调用方传 keyword 会被静默忽略并
+#                          返回全市场快讯，看起来成功、内容却完全不相关。
+#
+# 删除后这些名字在工具列表里不存在，模型若幻觉出它们会立刻收到 tool not found，
+# 从而改用真实工具名——比「静默转发成另一个工具」安全：后者会让模型以为成功。
 TOOL_ALIASES = {
     "balance_sheet": "balancesheet",
     "cash_flow": "cashflow",
@@ -80,12 +95,10 @@ TOOL_ALIASES = {
     "balance_sheet_data": "balancesheet",
     "cash_flow_statement": "cashflow",
     "dividend_data": "dividend",
-    "news_search": "news",
     "research_reports": "research_report",
     "announcements": "anns_d",
     "announcement": "anns_d",
     "stock_data": "daily",
-    "stock_quote": "daily",
     "market_data": "daily",
     "index_daily": "daily",
     "index_weekly": "weekly",
@@ -96,8 +109,6 @@ TOOL_ALIASES = {
     "fund_data": "fund_daily",
     "fund_info": "fund_nav",
     # 港美股工具常见幻觉名
-    "hk_quote": "hk_daily",
-    "us_quote": "us_daily",
     "hk_stock_daily": "hk_daily",
     "us_stock_daily": "us_daily",
     "hk_financial_indicator": "hk_fina_indicator",
